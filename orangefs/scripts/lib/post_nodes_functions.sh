@@ -201,6 +201,25 @@ datacrumbs_post_nodes_main() {
   # install_orangefs_dependencies
   # install_orangefs
   setup_orangefs_module
+
+  if [ "$IS_LOGIN_NODE" = "1" ]; then
+    log_info "Running OrangeFS cluster deployment as user cc"
+    sudo -u cc env SCRIPT_ROOT="${SCRIPT_ROOT}" bash -lc '
+      source "${SCRIPT_ROOT}/lib/orangefs_functions.sh"
+      source "${SCRIPT_ROOT}/lib/nfs_functions.sh"
+
+    create_orangefs_node_lists \
+      "/opt/nfs_client/storage_nodes.txt" \
+      "/opt/nfs_client/all_nodes.txt" \
+      "/opt/nfs_client/orangefs_server_list.txt" \
+      "/opt/nfs_client/orangefs_client_list.txt"
+
+    generate_orangefs_config_expect \
+      "/opt/nfs_client/storage_nodes.txt" \
+      "/opt/nfs_client/orangefs.conf"
+    '
+  fi
+
   setup_orangefs_directories
   configure_orangefs_firewall
 
@@ -220,18 +239,6 @@ datacrumbs_post_nodes_main() {
     sudo -u cc env SCRIPT_ROOT="${SCRIPT_ROOT}" bash -lc '
       source "${SCRIPT_ROOT}/lib/orangefs_functions.sh"
       source "${SCRIPT_ROOT}/lib/nfs_functions.sh"
-
-    create_orangefs_node_lists \
-      "/opt/nfs_client/storage_nodes.txt" \
-      "/opt/nfs_client/all_nodes.txt" \
-      "/opt/nfs_client/orangefs_server_list.txt" \
-      "/opt/nfs_client/orangefs_client_list.txt"
-
-    
-      
-    generate_orangefs_config_expect \
-      "/opt/nfs_client/storage_nodes.txt" \
-      "/opt/nfs_client/orangefs.conf"
 
       deploy_orangefs_cluster \
         "/opt/nfs_client/orangefs_server_list.txt" \
