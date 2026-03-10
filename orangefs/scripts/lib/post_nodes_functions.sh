@@ -201,6 +201,8 @@ datacrumbs_post_nodes_main() {
   # install_orangefs_dependencies
   # install_orangefs
   setup_orangefs_module
+  install_parallel_ssh
+  install_expect_package
 
   if [ "$IS_LOGIN_NODE" = "1" ]; then
     log_info "Running OrangeFS cluster deployment as user cc"
@@ -231,8 +233,6 @@ datacrumbs_post_nodes_main() {
     log_info "Storage node OrangeFS client configured"
   fi
 
-  install_parallel_ssh
-  install_expect_package
 
   if [ "$IS_LOGIN_NODE" = "1" ]; then
     log_info "Running OrangeFS cluster deployment as user cc"
