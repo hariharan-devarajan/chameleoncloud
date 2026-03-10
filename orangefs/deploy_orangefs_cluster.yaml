@@ -1,0 +1,249 @@
+# This describes what is deployed by this template.
+description: Login node (NFS server) + compute/storage NFS clients with ordered post-deploy scripts on Chameleon
+
+# This defines the minimum Heat version required by this template.
+heat_template_version: 2015-10-15
+
+resources:
+  login_node_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_param: node_network }
+
+  login_node_floating_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: public
+
+  login_node:
+    type: OS::Nova::Server
+    properties:
+      flavor: { get_param: node_flavor }
+      image: { get_param: node_image }
+      user_data_format: SOFTWARE_CONFIG
+      config_drive: true
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: login_node_port }
+      scheduler_hints: { reservation: { get_param: reservation_id } }
+      user_data:
+        str_replace:
+          template: &common_node_bootstrap
+            { get_file: scripts/common_node_bootstrap.sh }
+          params:
+            __PUBLIC_KEY__: { get_param: key_public }
+            __PRIVATE_KEY__: { get_param: key_private }
+            __IS_LOGIN_NODE__: "1"
+            __IS_COMPUTE_NODE__: "0"
+            __IS_STORAGE_NODE__: "0"
+            __NFS_SERVER_IP__: ""
+            __STACK_NAME__: { get_param: "OS::stack_name" }
+            __COMPUTE_COUNT__: { get_param: compute_node_count }
+            __STORAGE_COUNT__: { get_param: storage_node_count }
+            __OS_AUTH_TYPE__: { get_param: os_auth_type }
+            __OS_AUTH_URL__: { get_param: os_auth_url }
+            __OS_IDENTITY_API_VERSION__: { get_param: os_identity_api_version }
+            __OS_REGION_NAME__: { get_param: os_region_name }
+            __OS_INTERFACE__: { get_param: os_interface }
+            __OS_APPLICATION_CREDENTIAL_ID__:
+              { get_param: os_application_credential_id }
+            __OS_APPLICATION_CREDENTIAL_SECRET__:
+              { get_param: os_application_credential_secret }
+            __KEY_FUNCTIONS__: { get_file: scripts/lib/key_functions.sh }
+            __NFS_FUNCTIONS__: { get_file: scripts/lib/nfs_functions.sh }
+            __POST_NODES_FUNCTIONS__:
+              { get_file: scripts/lib/post_nodes_functions.sh }
+            __POST_NODES_SCRIPT__: { get_file: scripts/datacrumbs-post-nodes.sh }
+
+  login_node_ip_association:
+    type: OS::Neutron::FloatingIPAssociation
+    properties:
+      floatingip_id: { get_resource: login_node_floating_ip }
+      port_id: { get_resource: login_node_port }
+
+  compute_nodes:
+    type: OS::Heat::ResourceGroup
+    depends_on: login_node
+    properties:
+      count: { get_param: compute_node_count }
+      resource_def: &compute_nfs_client_resource_def
+        type: OS::Nova::Server
+        properties:
+          flavor: { get_param: node_flavor }
+          image: { get_param: node_image }
+          key_name: { get_param: key_name }
+          networks:
+            - network: { get_param: node_network }
+          scheduler_hints: { reservation: { get_param: reservation_id } }
+          user_data:
+            str_replace:
+              template: *common_node_bootstrap
+              params:
+                __NFS_SERVER_IP__: { get_attr: [login_node, first_address] }
+                __PUBLIC_KEY__: { get_param: key_public }
+                __PRIVATE_KEY__: { get_param: key_private }
+                __IS_LOGIN_NODE__: "0"
+                __IS_COMPUTE_NODE__: "1"
+                __IS_STORAGE_NODE__: "0"
+                __STACK_NAME__: ""
+                __COMPUTE_COUNT__: "0"
+                __STORAGE_COUNT__: "0"
+                __OS_AUTH_TYPE__: ""
+                __OS_AUTH_URL__: ""
+                __OS_IDENTITY_API_VERSION__: ""
+                __OS_REGION_NAME__: ""
+                __OS_INTERFACE__: ""
+                __OS_APPLICATION_CREDENTIAL_ID__: ""
+                __OS_APPLICATION_CREDENTIAL_SECRET__: ""
+                __KEY_FUNCTIONS__: { get_file: scripts/lib/key_functions.sh }
+                __NFS_FUNCTIONS__: { get_file: scripts/lib/nfs_functions.sh }
+                __POST_NODES_FUNCTIONS__:
+                  { get_file: scripts/lib/post_nodes_functions.sh }
+                __POST_NODES_SCRIPT__: { get_file: scripts/datacrumbs-post-nodes.sh }
+
+  storage_nodes:
+    type: OS::Heat::ResourceGroup
+    depends_on: login_node
+    properties:
+      count: { get_param: storage_node_count }
+      resource_def: &storage_nfs_client_resource_def
+        type: OS::Nova::Server
+        properties:
+          flavor: { get_param: node_flavor }
+          image: { get_param: node_image }
+          key_name: { get_param: key_name }
+          networks:
+            - network: { get_param: node_network }
+          scheduler_hints: { reservation: { get_param: reservation_id } }
+          user_data:
+            str_replace:
+              template: *common_node_bootstrap
+              params:
+                __NFS_SERVER_IP__: { get_attr: [login_node, first_address] }
+                __PUBLIC_KEY__: { get_param: key_public }
+                __PRIVATE_KEY__: { get_param: key_private }
+                __IS_LOGIN_NODE__: "0"
+                __IS_COMPUTE_NODE__: "0"
+                __IS_STORAGE_NODE__: "1"
+                __STACK_NAME__: ""
+                __COMPUTE_COUNT__: "0"
+                __STORAGE_COUNT__: "0"
+                __OS_AUTH_TYPE__: ""
+                __OS_AUTH_URL__: ""
+                __OS_IDENTITY_API_VERSION__: ""
+                __OS_REGION_NAME__: ""
+                __OS_INTERFACE__: ""
+                __OS_APPLICATION_CREDENTIAL_ID__: ""
+                __OS_APPLICATION_CREDENTIAL_SECRET__: ""
+                __KEY_FUNCTIONS__: { get_file: scripts/lib/key_functions.sh }
+                __NFS_FUNCTIONS__: { get_file: scripts/lib/nfs_functions.sh }
+                __POST_NODES_FUNCTIONS__:
+                  { get_file: scripts/lib/post_nodes_functions.sh }
+                __POST_NODES_SCRIPT__: { get_file: scripts/datacrumbs-post-nodes.sh }
+
+parameters:
+  key_public:
+    type: string
+    description: Public key content for all nodes (from env.yaml)
+    hidden: true
+
+  key_private:
+    type: string
+    description: Private key content for all nodes (from env.yaml)
+    hidden: true
+
+  compute_node_count:
+    type: number
+    description: Number of compute nodes (NFS clients)
+    default: 1
+    constraints:
+      - range: { min: 1 }
+        description: There must be at least one compute node.
+
+  storage_node_count:
+    type: number
+    description: Number of storage nodes (NFS clients)
+    default: 1
+    constraints:
+      - range: { min: 1 }
+        description: There must be at least one storage node.
+
+  key_name:
+    type: string
+    description: Name of a KeyPair to enable SSH access
+    default: default
+    constraints:
+      - custom_constraint: nova.keypair
+
+  reservation_id:
+    type: string
+    description: Blazar reservation ID for launching all instances
+    constraints:
+      - custom_constraint: blazar.reservation
+
+  os_auth_type:
+    type: string
+    description: OpenStack auth type for login-node API calls
+    default: v3applicationcredential
+
+  os_auth_url:
+    type: string
+    description: OpenStack auth URL for login-node API calls
+    default: https://chi.tacc.chameleoncloud.org:5000/v3
+
+  os_identity_api_version:
+    type: string
+    description: OpenStack identity API version
+    default: "3"
+
+  os_region_name:
+    type: string
+    description: OpenStack region name for login-node API calls
+    default: CHI@TACC
+
+  os_interface:
+    type: string
+    description: OpenStack interface for login-node API calls
+    default: public
+
+  os_application_credential_id:
+    type: string
+    description: OpenStack application credential ID
+    hidden: true
+
+  os_application_credential_secret:
+    type: string
+    description: OpenStack application credential secret
+    hidden: true
+
+  node_image:
+    type: string
+    description: Image used for login, compute, and storage nodes
+    default: DC_ORANGEFS_03-03-2026
+
+  node_flavor:
+    type: string
+    description: Flavor used for login, compute, and storage nodes
+    default: baremetal
+
+  node_network:
+    type: string
+    description: OpenStack network used by all nodes
+    default: sharednet1
+
+outputs:
+  login_node_public_ip:
+    description: Public IP of the login node
+    value: { get_attr: [login_node_floating_ip, floating_ip_address] }
+
+  login_node_private_ip:
+    description: Private IP of the login node
+    value: { get_attr: [login_node, first_address] }
+
+  compute_node_private_ips:
+    description: Private IP addresses of compute nodes
+    value: { get_attr: [compute_nodes, first_address] }
+
+  storage_node_private_ips:
+    description: Private IP addresses of storage nodes
+    value: { get_attr: [storage_nodes, first_address] }

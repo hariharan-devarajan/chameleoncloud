@@ -1,0 +1,121 @@
+#!/bin/bash
+
+datacrumbs_post_nodes_setup() {
+  source /etc/datacrumbs-post.env
+
+  LOG_FILE="/var/log/datacrumbs-post-nodes.log"
+  touch "$LOG_FILE"
+  chmod 644 "$LOG_FILE"
+  exec > >(tee -a "$LOG_FILE") 2>&1
+
+  if ! command -v openstack >/dev/null 2>&1; then
+    timeout 600 bash -lc 'DEBIAN_FRONTEND=noninteractive apt-get update'
+    timeout 600 bash -lc 'DEBIAN_FRONTEND=noninteractive apt-get install -y python3-openstackclient'
+  fi
+
+  export OS_AUTH_TYPE
+  export OS_AUTH_URL
+  export OS_IDENTITY_API_VERSION
+  export OS_REGION_NAME
+  export OS_INTERFACE
+  export OS_APPLICATION_CREDENTIAL_ID
+  export OS_APPLICATION_CREDENTIAL_SECRET
+
+  mkdir -p /opt/nfs_client
+  : > /opt/nfs_client/all_nodes.txt
+  : > /opt/nfs_client/compute_nodes.txt
+  : > /opt/nfs_client/storage_nodes.txt
+  : > /opt/nfs_client/login_node.txt
+}
+
+wait_for_nodes_ready() {
+  local max_attempts=60
+  local sleep_seconds=10
+  local attempt
+  local server_list_file="/tmp/server_list.txt"
+
+  for attempt in $(seq 1 "$max_attempts"); do
+    echo "Checking node readiness from OpenStack (attempt ${attempt}/${max_attempts})"
+    if timeout 30 openstack server list -f value -c Name -c Status -c Networks > "$server_list_file"; then
+      awk -v stack="$STACK_NAME" '
+        $1 ~ "^"stack"-compute_nodes-" && $2 == "ACTIVE" {
+          ip=$3; sub(/.*=/, "", ip); if (ip != "") print ip
+        }
+      ' "$server_list_file" | sort -u | head -n "$COMPUTE_COUNT" > /opt/nfs_client/compute_nodes.txt
+
+      awk -v stack="$STACK_NAME" '
+        $1 ~ "^"stack"-storage_nodes-" && $2 == "ACTIVE" {
+          ip=$3; sub(/.*=/, "", ip); if (ip != "") print ip
+        }
+      ' "$server_list_file" | sort -u | head -n "$STORAGE_COUNT" > /opt/nfs_client/storage_nodes.txt
+
+      awk -v stack="$STACK_NAME" '
+        $1 ~ "^"stack"-login_node-" && $2 == "ACTIVE" {
+          ip=$3; sub(/.*=/, "", ip); if (ip != "") print ip; exit
+        }
+      ' "$server_list_file" > /opt/nfs_client/login_node.txt
+
+      FOUND_COMPUTE="$(wc -l < /opt/nfs_client/compute_nodes.txt | tr -d ' ')"
+      FOUND_STORAGE="$(wc -l < /opt/nfs_client/storage_nodes.txt | tr -d ' ')"
+      LOGIN_IP="$(head -n1 /opt/nfs_client/login_node.txt || true)"
+
+      echo "Found compute nodes: ${FOUND_COMPUTE}/${COMPUTE_COUNT}"
+      echo "Found storage nodes: ${FOUND_STORAGE}/${STORAGE_COUNT}"
+      echo "Login IP: ${LOGIN_IP:-<missing>}"
+
+      if [ "$FOUND_COMPUTE" -ge "$COMPUTE_COUNT" ] && [ "$FOUND_STORAGE" -ge "$STORAGE_COUNT" ] && [ -n "$LOGIN_IP" ]; then
+        cat /opt/nfs_client/compute_nodes.txt /opt/nfs_client/storage_nodes.txt | sed '/^$/d' | sort -u > /opt/nfs_client/all_nodes.txt
+        return 0
+      fi
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  echo "Timed out waiting for all nodes to become ACTIVE with IPs" >&2
+  return 1
+}
+
+setup_client_mount() {
+  local ip="$1"
+  local ok="0"
+
+  for attempt in $(seq 1 12); do
+    echo "Configuring mount on client ${ip} (attempt ${attempt}/12)"
+    if timeout 45 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o ConnectionAttempts=1 -o BatchMode=yes "cc@${ip}" "sudo bash -lc '
+      mkdir -p /opt/nfs_client /mnt/orangefs /mnt/nvme/orangefs_{data,meta}
+      grep -q \"${LOGIN_IP}:/opt/shared[[:space:]]\+/opt/nfs_client\" /etc/fstab || echo \"${LOGIN_IP}:/opt/shared    /opt/nfs_client    nfs defaults,_netdev 0 0\" >> /etc/fstab
+      grep -q \"tcp://${LOGIN_IP}:3334/orangefs /mnt/orangefs pvfs2\" /etc/pvfs2tab 2>/dev/null || echo \"tcp://${LOGIN_IP}:3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0\" >> /etc/pvfs2tab
+      chmod a+r /etc/pvfs2tab
+      mount -a || true
+      mountpoint -q /opt/nfs_client
+    '"; then
+      ok="1"
+      break
+    fi
+    sleep 10
+  done
+
+  if [ "$ok" = "0" ]; then
+    echo "Failed to configure mount on client ${ip}" >&2
+    return 1
+  fi
+}
+
+configure_all_client_mounts() {
+  while IFS= read -r ip; do
+    [ -n "$ip" ] && setup_client_mount "$ip"
+  done < /opt/nfs_client/all_nodes.txt
+}
+
+finalize_post_nodes() {
+  echo "All nodes are up with IPs and NFS mounts configured."
+  chown cc:cc /opt/nfs_client/all_nodes.txt /opt/nfs_client/compute_nodes.txt /opt/nfs_client/storage_nodes.txt /opt/nfs_client/login_node.txt
+  echo "Running final cluster configuration script"
+}
+
+datacrumbs_post_nodes_main() {
+  datacrumbs_post_nodes_setup
+  wait_for_nodes_ready
+  configure_all_client_mounts
+  finalize_post_nodes
+}
