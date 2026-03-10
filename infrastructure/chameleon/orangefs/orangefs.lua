@@ -15,13 +15,13 @@ OrangeFS 2.10.0 modulefile:
     * \$HOME/.orangefs.conf if it exists
     * otherwise falls back to /etc/orangefs/orangefs-server.conf
 
-Configure options: --prefix=/opt/orangefs/2.10.0 --with-db-backend=lmdb --enable-shared
+Configure options: --prefix=/opt/nfs_client/orangefs/2.10.0 --with-db-backend=lmdb --enable-shared
 Usage:
   module load orangefs/2.10.0
 ]])
 
 -- Set the installation directory
-local prefix = "/opt/orangefs/2.10.0"
+local prefix = "/opt/nfs_client/orangefs/2.10.0"
 
 -- Define OrangeFS directories
 local bin_dir = pathJoin(prefix, "bin")

@@ -30,7 +30,7 @@ install_orangefs_dependencies() {
 
 install_orangefs() {
   local version="2.10.0"
-  local prefix="/opt/orangefs/${version}"
+  local prefix="/opt/shared/orangefs/${version}"
   local pkgname="orangefs"
   local ofsurl="https://github.com/waltligon/orangefs/releases/download/v.${version}/orangefs-${version}.tar.gz"
   local temp_dir="/tmp/orangefs-install"
@@ -61,7 +61,7 @@ install_orangefs() {
 
 setup_orangefs_module() {
   local version="2.10.0"
-  local prefix="/opt/orangefs/${version}"
+  local prefix="/opt/shared/orangefs/${version}"
   local module_dir="/opt/apps/modulefiles"
 
   mkdir -p "${module_dir}"

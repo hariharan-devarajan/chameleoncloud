@@ -43,7 +43,7 @@ log_info "Client list: ${client_loc}"
 log_info "Config file: ${conf_file}"
 log_info "Client mount dir: ${client_dir}"
 
-OFS_PATH="${ORANGEFS_PATH:-/opt/orangefs/2.10.0}"
+OFS_PATH="${ORANGEFS_PATH:-/opt/nfs_client/orangefs/2.10.0}"
 
 if [ ! -f "${conf_file}" ]; then
   log_error "Configuration file not found: ${conf_file}"
@@ -65,12 +65,12 @@ echo "CWD: ${CWD}"
 
 log_info "Configuring OrangeFS servers"
 if ! timeout 300 parallel-ssh -h "${server_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
-  "export PATH=\"/opt/orangefs/2.10.0/sbin:\${PATH}\" && \
-   export ORANGEFS_PATH=\"/opt/orangefs/2.10.0\" && \
+  "export PATH=\"/opt/nfs_client/orangefs/2.10.0/sbin:\${PATH}\" && \
+   export ORANGEFS_PATH=\"/opt/nfs_client/orangefs/2.10.0\" && \
    mkdir -p '/mnt/nvme/orangefs_data' && \
    mkdir -p '/mnt/nvme/orangefs_metadata' && \
-   /opt/orangefs/2.10.0/sbin/pvfs2-server -f -a \$(hostname) \"${conf_file}\" && \
-   /opt/orangefs/2.10.0/sbin/pvfs2-server -a \$(hostname) \"${conf_file}\""; then
+   /opt/nfs_client/orangefs/2.10.0/sbin/pvfs2-server -f -a \$(hostname) \"${conf_file}\" && \
+   /opt/nfs_client/orangefs/2.10.0/sbin/pvfs2-server -a \$(hostname) \"${conf_file}\""; then
   log_error "Failed to configure OrangeFS servers"
   exit 1
 fi
@@ -85,7 +85,7 @@ log_info "Starting clients"
 
 if ! timeout 300 parallel-ssh -h "${client_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
   "mkdir -p \"${client_dir}\" && \
-   sudo /opt/chameleoncloud/orangefs/scripts/orangefs_client_mount.sh && \
+   sudo /opt/nfs_client/chameleoncloud/orangefs/scripts/orangefs_client_mount.sh && \
    sudo mount -t pvfs2 tcp://\$(head -n1 \"${server_loc}\"):${comm_port}/${name} \"${client_dir}\""; then
   log_error "Failed to configure OrangeFS clients"
   exit 1

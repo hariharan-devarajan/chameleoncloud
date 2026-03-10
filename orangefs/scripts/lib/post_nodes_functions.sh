@@ -281,5 +281,5 @@ datacrumbs_post_nodes_main() {
 
   finalize_post_nodes
   log_info "OrangeFS cluster configuration prepared"
-  log_info "To deploy OrangeFS, run: sudo /opt/chameleoncloud/orangefs/scripts/deploy.sh /opt/nfs_client/orangefs_server_list.txt /opt/nfs_client/orangefs_client_list.txt /opt/nfs_client/orangefs.conf"
+  log_info "To deploy OrangeFS, run: sudo /opt/nfs_client/chameleoncloud/orangefs/scripts/deploy.sh /opt/nfs_client/orangefs_server_list.txt /opt/nfs_client/orangefs_client_list.txt /opt/nfs_client/orangefs.conf"
 }

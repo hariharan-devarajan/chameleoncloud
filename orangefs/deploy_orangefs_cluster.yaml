@@ -37,7 +37,7 @@ resources:
 
             REPO_URL="__REPO_URL__"
             REPO_REF="__REPO_REF__"
-            REPO_DIR="/opt/chameleoncloud"
+            REPO_DIR="/opt/shared/chameleoncloud"
 
             if [ -d "$REPO_DIR/.git" ]; then
               git -C "$REPO_DIR" fetch --all

@@ -94,8 +94,8 @@ log_info "Configured NFS client mount using server IP ${NFS_SERVER_IP}"
 
 log_info "Bootstrap completed for role ${NODE_ROLE}"
 
-install_orangefs_dependencies
-install_orangefs
+# install_orangefs_dependencies
+# install_orangefs
 setup_orangefs_module
 setup_orangefs_directories
 configure_orangefs_firewall

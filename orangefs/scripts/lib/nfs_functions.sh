@@ -17,8 +17,6 @@ setup_login_nfs_server() {
   systemctl enable nfs-kernel-server && systemctl start nfs-kernel-server
   exportfs -ra
 
-  touch /opt/shared/nodelist.txt
-  chown -R cc:cc /opt/shared/nodelist.txt
   [ -f /etc/auto_mount_readme ] || touch /etc/auto_mount_readme
 }
 

@@ -32,7 +32,7 @@ source /etc/profile.d/lmod.sh
 log_info "Loading OrangeFS module"
 module load orangefs
 
-OFS_PATH="${ORANGEFS_PATH:-/opt/orangefs/2.10.0}"
+OFS_PATH="${ORANGEFS_PATH:-/opt/nfs_client/orangefs/2.10.0}"
 
 log_info "Starting OrangeFS pvfs2-client"
 "${OFS_PATH}/sbin/pvfs2-client" -p "${OFS_PATH}/sbin/pvfs2-client-core"
