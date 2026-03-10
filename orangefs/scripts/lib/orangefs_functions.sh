@@ -435,8 +435,8 @@ deploy_orangefs_servers() {
      mkdir -p '/mnt/nvme/orangefs_metadata' && \
      rm -rf /mnt/nvme/orangefs_data/* /mnt/nvme/orangefs_metadata/* && \
      rm /opt/orangefs/logs/orangefs.log && \
-     ${ofs_path}/sbin/pvfs2-server -f -a \$(hostname) \"${conf_file}\" && \
-     ${ofs_path}/sbin/pvfs2-server -a \$(hostname) \"${conf_file}\""; then
+     ${ofs_path}/sbin/pvfs2-server -f -a '$(hostname)' \"${conf_file}\" && \
+     ${ofs_path}/sbin/pvfs2-server -a '$(hostname)' "${conf_file}\""; then
     log_error "Failed to configure OrangeFS servers"
     return 1
   fi
