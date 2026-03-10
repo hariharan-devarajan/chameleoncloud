@@ -75,10 +75,10 @@ storage_count = int(sys.argv[4])
 def extract_ipv4(value):
     text = value if isinstance(value, str) else str(value)
     matches = re.findall(r'(?:\d{1,3}\.){3}\d{1,3}', text)
-  for ip in matches:
-    if ip.startswith('10.'):
-      return ip
-  return ''
+    for ip in matches:
+        if ip.startswith('10.'):
+            return ip
+    return ''
 
 with open(server_list_file, 'r', encoding='utf-8') as file_obj:
     rows = json.load(file_obj)
