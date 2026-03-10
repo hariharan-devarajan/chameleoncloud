@@ -25,7 +25,7 @@ log_debug() {
 
 install_orangefs_dependencies() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential wget tar \
-    liblmdb-dev libssl-dev libattr1-dev libfuse-dev pkg-config
+    liblmdb-dev libssl-dev libattr1-dev libfuse-dev pkg-config  environment-modules
 }
 
 install_orangefs() {
