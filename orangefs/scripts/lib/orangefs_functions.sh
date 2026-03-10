@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -euxo pipefail
+set -euxo pipefail
 
 log_with_level() {
   local level="$1"

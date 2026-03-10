@@ -183,3 +183,68 @@ finalize_post_nodes() {
   chown cc:cc /opt/nfs_client/all_nodes.txt /opt/nfs_client/compute_nodes.txt /opt/nfs_client/storage_nodes.txt /opt/nfs_client/login_node.txt
   log_info "Running final cluster configuration script"
 }
+
+
+datacrumbs_post_nodes_main() {
+  log_debug "Timeout config: OPENSTACK_TIMEOUT_SECONDS=${OPENSTACK_TIMEOUT_SECONDS:-30}, MOUNT_SSH_TIMEOUT_SECONDS=${MOUNT_SSH_TIMEOUT_SECONDS:-60}"
+  datacrumbs_post_nodes_setup
+  wait_for_nodes_ready
+  configure_all_client_mounts
+
+  
+  if [ "$IS_LOGIN_NODE" = "1" ]; then
+    configure_cluster_hosts_resolution \
+      "/opt/nfs_client/all_nodes.txt" \
+      "cc"
+  fi
+
+
+  # install_orangefs_dependencies
+  # install_orangefs
+  setup_orangefs_module
+  setup_orangefs_directories
+  configure_orangefs_firewall
+
+  if [ "$IS_LOGIN_NODE" = "1" ]; then
+    log_info "Login node OrangeFS client configured"
+  elif [ "$IS_COMPUTE_NODE" = "1" ]; then
+    log_info "Compute node OrangeFS server and client configured"
+  else
+    log_info "Storage node OrangeFS client configured"
+  fi
+
+  install_parallel_ssh
+  install_expect_package
+
+  if [ "$IS_LOGIN_NODE" = "1" ]; then
+    log_info "Running OrangeFS cluster deployment as user cc"
+    sudo -u cc env SCRIPT_ROOT="${SCRIPT_ROOT}" bash -lc '
+      source "${SCRIPT_ROOT}/lib/orangefs_functions.sh"
+      source "${SCRIPT_ROOT}/lib/nfs_functions.sh"
+
+    create_orangefs_node_lists \
+      "/opt/nfs_client/storage_nodes.txt" \
+      "/opt/nfs_client/all_nodes.txt" \
+      "/opt/nfs_client/orangefs_server_list.txt" \
+      "/opt/nfs_client/orangefs_client_list.txt"
+
+    
+      
+    generate_orangefs_config_expect \
+      "/opt/nfs_client/storage_nodes.txt" \
+      "/opt/nfs_client/orangefs.conf"
+
+      deploy_orangefs_cluster \
+        "/opt/nfs_client/orangefs_server_list.txt" \
+        "/opt/nfs_client/orangefs_client_list.txt" \
+        "/opt/nfs_client/orangefs.conf" \
+        "/mnt/orangefs"
+    '
+  fi
+
+
+
+  finalize_post_nodes
+  log_info "OrangeFS cluster configuration prepared"
+  log_info "OrangeFS deployment invoked from common bootstrap"
+}
