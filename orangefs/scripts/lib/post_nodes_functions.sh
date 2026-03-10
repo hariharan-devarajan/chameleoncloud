@@ -190,7 +190,7 @@ datacrumbs_post_nodes_main() {
   datacrumbs_post_nodes_setup
   wait_for_nodes_ready
   configure_all_client_mounts
-
+  
   
   if [ "$IS_LOGIN_NODE" = "1" ]; then
     configure_cluster_hosts_resolution \
