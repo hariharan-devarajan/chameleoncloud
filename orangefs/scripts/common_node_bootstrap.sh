@@ -60,6 +60,9 @@ source "$SCRIPT_ROOT/lib/key_functions.sh"
 source "$SCRIPT_ROOT/lib/nfs_functions.sh"
 log_debug "Loaded function libraries from ${SCRIPT_ROOT}/lib"
 
+source "$SCRIPT_ROOT/lib/orangefs_functions.sh"
+log_debug "Loaded OrangeFS functions library"
+
 setup_node_role "$IS_LOGIN_NODE" "$IS_COMPUTE_NODE" "$IS_STORAGE_NODE"
 setup_ssh_keys "$PUBLIC_KEY" "$PRIVATE_KEY"
 install_nfs_client_packages
@@ -90,3 +93,19 @@ setup_nfs_client_mount "$NFS_SERVER_IP"
 log_info "Configured NFS client mount using server IP ${NFS_SERVER_IP}"
 
 log_info "Bootstrap completed for role ${NODE_ROLE}"
+
+install_orangefs_dependencies
+install_orangefs
+setup_orangefs_module
+setup_orangefs_directories
+configure_orangefs_firewall
+
+if [ "$IS_LOGIN_NODE" = "1" ]; then
+  log_info "Login node OrangeFS client configured"
+elif [ "$IS_COMPUTE_NODE" = "1" ]; then
+  log_info "Compute node OrangeFS server and client configured"
+else
+  log_info "Storage node OrangeFS client configured"
+fi
+
+log_info "OrangeFS installation and configuration completed"
