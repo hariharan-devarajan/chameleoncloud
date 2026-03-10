@@ -56,12 +56,13 @@ datacrumbs_post_nodes_setup() {
 wait_for_nodes_ready() {
   local max_attempts=60
   local sleep_seconds=10
+  local openstack_timeout_seconds="${OPENSTACK_TIMEOUT_SECONDS:-30}"
   local attempt
   local server_list_file="/tmp/server_list.json"
 
   for attempt in $(seq 1 "$max_attempts"); do
     log_info "Checking node readiness from OpenStack (attempt ${attempt}/${max_attempts})"
-    if timeout 30 openstack server list -f json -c Name -c Status -c Networks > "$server_list_file"; then
+    if timeout "$openstack_timeout_seconds" openstack server list -f json -c Name -c Status -c Networks > "$server_list_file"; then
       python3 - "$server_list_file" "$STACK_NAME" "$COMPUTE_COUNT" "$STORAGE_COUNT" <<'PY'
 import json
 import re
@@ -143,10 +144,13 @@ PY
 setup_client_mount() {
   local ip="$1"
   local ok="0"
+  local max_attempts=10
+  local retry_interval_seconds=60
+  local mount_ssh_timeout_seconds="${MOUNT_SSH_TIMEOUT_SECONDS:-60}"
 
-  for attempt in $(seq 1 12); do
-    log_info "Configuring mount on client ${ip} (attempt ${attempt}/12)"
-    if timeout 45 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o ConnectionAttempts=1 -o BatchMode=yes "cc@${ip}" "sudo bash -lc '
+  for attempt in $(seq 1 "$max_attempts"); do
+    log_info "Configuring mount on client ${ip} (attempt ${attempt}/${max_attempts})"
+    if timeout "$mount_ssh_timeout_seconds" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=15 -o ConnectionAttempts=1 -o BatchMode=yes "cc@${ip}" "sudo bash -lc '
       mkdir -p /opt/nfs_client /mnt/orangefs /mnt/nvme/orangefs_{data,meta}
       grep -q \"${LOGIN_IP}:/opt/shared[[:space:]]\+/opt/nfs_client\" /etc/fstab || echo \"${LOGIN_IP}:/opt/shared    /opt/nfs_client    nfs defaults,_netdev 0 0\" >> /etc/fstab
       grep -q \"tcp://${LOGIN_IP}:3334/orangefs /mnt/orangefs pvfs2\" /etc/pvfs2tab 2>/dev/null || echo \"tcp://${LOGIN_IP}:3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0\" >> /etc/pvfs2tab
@@ -157,8 +161,8 @@ setup_client_mount() {
       ok="1"
       break
     fi
-    log_debug "Mount configuration retry pending for ${ip}"
-    sleep 10
+    log_warning "Mount configuration attempt ${attempt}/${max_attempts} failed for ${ip}; retrying in ${retry_interval_seconds}s"
+    sleep "$retry_interval_seconds"
   done
 
   if [ "$ok" = "0" ]; then
@@ -180,6 +184,7 @@ finalize_post_nodes() {
 }
 
 datacrumbs_post_nodes_main() {
+  log_debug "Timeout config: OPENSTACK_TIMEOUT_SECONDS=${OPENSTACK_TIMEOUT_SECONDS:-30}, MOUNT_SSH_TIMEOUT_SECONDS=${MOUNT_SSH_TIMEOUT_SECONDS:-60}"
   datacrumbs_post_nodes_setup
   wait_for_nodes_ready
   configure_all_client_mounts

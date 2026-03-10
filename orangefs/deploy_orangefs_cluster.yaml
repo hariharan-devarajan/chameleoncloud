@@ -63,6 +63,8 @@ resources:
             export OS_INTERFACE="__OS_INTERFACE__"
             export OS_APPLICATION_CREDENTIAL_ID="__OS_APPLICATION_CREDENTIAL_ID__"
             export OS_APPLICATION_CREDENTIAL_SECRET="__OS_APPLICATION_CREDENTIAL_SECRET__"
+            export OPENSTACK_TIMEOUT_SECONDS="__OPENSTACK_TIMEOUT_SECONDS__"
+            export MOUNT_SSH_TIMEOUT_SECONDS="__MOUNT_SSH_TIMEOUT_SECONDS__"
 
             chmod +x "$REPO_DIR/orangefs/scripts/common_node_bootstrap.sh"
             bash "$REPO_DIR/orangefs/scripts/common_node_bootstrap.sh"
@@ -87,6 +89,9 @@ resources:
               { get_param: os_application_credential_secret }
             __REPO_URL__: { get_param: repo_url }
             __REPO_REF__: { get_param: repo_ref }
+            __OPENSTACK_TIMEOUT_SECONDS__: { get_param: openstack_timeout_seconds }
+            __MOUNT_SSH_TIMEOUT_SECONDS__:
+              { get_param: mount_ssh_timeout_seconds }
 
   login_node_ip_association:
     type: OS::Neutron::FloatingIPAssociation
@@ -130,6 +135,10 @@ resources:
                 __OS_APPLICATION_CREDENTIAL_SECRET__: ""
                 __REPO_URL__: { get_param: repo_url }
                 __REPO_REF__: { get_param: repo_ref }
+                __OPENSTACK_TIMEOUT_SECONDS__:
+                  { get_param: openstack_timeout_seconds }
+                __MOUNT_SSH_TIMEOUT_SECONDS__:
+                  { get_param: mount_ssh_timeout_seconds }
 
   storage_nodes:
     type: OS::Heat::ResourceGroup
@@ -167,6 +176,10 @@ resources:
                 __OS_APPLICATION_CREDENTIAL_SECRET__: ""
                 __REPO_URL__: { get_param: repo_url }
                 __REPO_REF__: { get_param: repo_ref }
+                __OPENSTACK_TIMEOUT_SECONDS__:
+                  { get_param: openstack_timeout_seconds }
+                __MOUNT_SSH_TIMEOUT_SECONDS__:
+                  { get_param: mount_ssh_timeout_seconds }
 
 parameters:
   key_public:
@@ -267,6 +280,16 @@ parameters:
     type: string
     description: Git branch or tag to checkout for orangefs scripts
     default: dev
+
+  openstack_timeout_seconds:
+    type: number
+    description: Timeout in seconds for OpenStack server-list calls in post-nodes flow
+    default: 1800
+
+  mount_ssh_timeout_seconds:
+    type: number
+    description: Timeout in seconds for per-node SSH mount configuration attempts
+    default: 1800
 
 outputs:
   login_node_public_ip:
