@@ -78,6 +78,42 @@ link_login_shared_mount() {
   ln -s /opt/shared /opt/nfs_client
 }
 
+extract_hostname_from_output() {
+  awk '
+    /^[[:space:]]*$/ { next }
+    /^Warning:/ { next }
+    /^Permanently added / { next }
+    {
+      line=$0
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+      if (line ~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/) {
+        candidate=line
+      }
+    }
+    END {
+      if (candidate != "") {
+        print candidate
+      }
+    }
+  '
+}
+
+resolve_cluster_node_hostname() {
+  local ip="$1"
+  local ssh_user="$2"
+  local ssh_opts="$3"
+  local local_ips_file="$4"
+  local raw_output
+
+  if grep -Fxq "${ip}" "${local_ips_file}"; then
+    hostname -s 2>/dev/null | extract_hostname_from_output || true
+    return 0
+  fi
+
+  raw_output="$(timeout 20 ssh ${ssh_opts} "${ssh_user}@${ip}" "hostname -s" </dev/null 2>&1 || true)"
+  printf '%s\n' "${raw_output}" | extract_hostname_from_output || true
+}
+
 debug_cluster_hosts_resolution() {
   local all_nodes_file="${1:-/opt/nfs_client/all_nodes.txt}"
   local ssh_user="${2:-cc}"
@@ -110,11 +146,7 @@ debug_cluster_hosts_resolution() {
   while IFS= read -r ip; do
     [ -z "${ip}" ] && continue
 
-    if grep -Fxq "${ip}" "${local_ips_file}"; then
-      hostname="$(hostname -s 2>/dev/null || true)"
-    else
-      hostname="$(timeout 20 ssh ${ssh_opts} "${ssh_user}@${ip}" "hostname -s" </dev/null 2>/dev/null || true)"
-    fi
+    hostname="$(resolve_cluster_node_hostname "${ip}" "${ssh_user}" "${ssh_opts}" "${local_ips_file}")"
 
     if [ -z "${hostname}" ]; then
       echo "${ip} <unresolved>"
@@ -170,11 +202,7 @@ configure_cluster_hosts_resolution() {
   while IFS= read -r ip; do
     [ -z "${ip}" ] && continue
 
-    if grep -Fxq "${ip}" "${local_ips_file}"; then
-      hostname="$(hostname -s 2>/dev/null || true)"
-    else
-      hostname="$(timeout 20 ssh ${ssh_opts} "${ssh_user}@${ip}" "hostname -s" </dev/null 2>/dev/null || true)"
-    fi
+    hostname="$(resolve_cluster_node_hostname "${ip}" "${ssh_user}" "${ssh_opts}" "${local_ips_file}")"
 
     if [ -z "${hostname}" ]; then
       echo "[$(date -Is)] STATUS=ERROR Could not resolve hostname for ${ip}"

@@ -185,6 +185,7 @@ setup_orangefs_directories() {
   mv /etc/pvfs2tab.tmp /etc/pvfs2tab
   grep -q "tcp://${STORAGE_SERVER_IP}:3334/orangefs /mnt/orangefs pvfs2" /etc/pvfs2tab 2>/dev/null || echo "tcp://${STORAGE_SERVER_IP}:3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0" >> /etc/pvfs2tab
 
+  chmod a+r /etc/pvfs2tab
   echo "[$(date -Is)] STATUS=SUCCESS OrangeFS directories created"
 }
 
