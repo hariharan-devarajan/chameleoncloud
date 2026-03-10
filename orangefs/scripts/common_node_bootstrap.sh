@@ -94,6 +94,13 @@ log_info "Configured NFS client mount using server IP ${NFS_SERVER_IP}"
 
 log_info "Bootstrap completed for role ${NODE_ROLE}"
 
+if [ "$IS_LOGIN_NODE" = "1" ]; then
+  configure_cluster_hosts_resolution \
+    "/opt/nfs_client/all_nodes.txt" \
+    "cc"
+fi
+
+
 # install_orangefs_dependencies
 # install_orangefs
 setup_orangefs_module
@@ -107,5 +114,42 @@ elif [ "$IS_COMPUTE_NODE" = "1" ]; then
 else
   log_info "Storage node OrangeFS client configured"
 fi
+
+install_parallel_ssh
+install_expect_package
+
+if [ "$IS_LOGIN_NODE" = "1" ]; then
+
+
+  log_info "Running OrangeFS cluster deployment as user cc"
+  sudo -u cc env SCRIPT_ROOT="${SCRIPT_ROOT}" bash -lc '
+    source "${SCRIPT_ROOT}/lib/orangefs_functions.sh"
+    source "${SCRIPT_ROOT}/lib/nfs_functions.sh"
+
+  create_orangefs_node_lists \
+    "/opt/nfs_client/storage_nodes.txt" \
+    "/opt/nfs_client/all_nodes.txt" \
+    "/opt/nfs_client/orangefs_server_list.txt" \
+    "/opt/nfs_client/orangefs_client_list.txt"
+
+  
+    
+  generate_orangefs_config_expect \
+    "/opt/nfs_client/storage_nodes.txt" \
+    "/opt/nfs_client/orangefs.conf"
+
+    deploy_orangefs_cluster \
+      "/opt/nfs_client/orangefs_server_list.txt" \
+      "/opt/nfs_client/orangefs_client_list.txt" \
+      "/opt/nfs_client/orangefs.conf" \
+      "/mnt/orangefs"
+  '
+fi
+
+
+
+finalize_post_nodes
+log_info "OrangeFS cluster configuration prepared"
+log_info "OrangeFS deployment invoked from common bootstrap"
 
 log_info "OrangeFS installation and configuration completed"
