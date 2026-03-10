@@ -103,15 +103,33 @@ resolve_cluster_node_hostname() {
   local ssh_user="$2"
   local ssh_opts="$3"
   local local_ips_file="$4"
+  local max_attempts=10
+  local retry_interval_seconds=60
+  local attempt
   local raw_output
+  local parsed_hostname
 
   if grep -Fxq "${ip}" "${local_ips_file}"; then
     hostname -s 2>/dev/null | extract_hostname_from_output || true
     return 0
   fi
 
-  raw_output="$(timeout 20 ssh ${ssh_opts} "${ssh_user}@${ip}" "hostname -s" </dev/null 2>&1 || true)"
-  printf '%s\n' "${raw_output}" | extract_hostname_from_output || true
+  for attempt in $(seq 1 "${max_attempts}"); do
+    raw_output="$(timeout 20 ssh ${ssh_opts} "${ssh_user}@${ip}" "hostname -s" </dev/null 2>&1 || true)"
+    parsed_hostname="$(printf '%s\n' "${raw_output}" | extract_hostname_from_output || true)"
+
+    if [ -n "${parsed_hostname}" ]; then
+      printf '%s\n' "${parsed_hostname}"
+      return 0
+    fi
+
+    if [ "${attempt}" -lt "${max_attempts}" ]; then
+      echo "[$(date -Is)] STATUS=WARNING Hostname lookup failed for ${ip} (attempt ${attempt}/${max_attempts}); retrying in ${retry_interval_seconds}s" >&2
+      sleep "${retry_interval_seconds}"
+    fi
+  done
+
+  return 0
 }
 
 debug_cluster_hosts_resolution() {
