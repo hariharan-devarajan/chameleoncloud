@@ -32,28 +32,65 @@ wait_for_nodes_ready() {
   local max_attempts=60
   local sleep_seconds=10
   local attempt
-  local server_list_file="/tmp/server_list.txt"
+  local server_list_file="/tmp/server_list.json"
 
   for attempt in $(seq 1 "$max_attempts"); do
     echo "Checking node readiness from OpenStack (attempt ${attempt}/${max_attempts})"
-    if timeout 30 openstack server list -f value -c Name -c Status -c Networks > "$server_list_file"; then
-      awk -v stack="$STACK_NAME" '
-        $1 ~ "^"stack"-compute_nodes-" && $2 == "ACTIVE" {
-          ip=$3; sub(/.*=/, "", ip); if (ip != "") print ip
-        }
-      ' "$server_list_file" | sort -u | head -n "$COMPUTE_COUNT" > /opt/nfs_client/compute_nodes.txt
+    if timeout 30 openstack server list -f json -c Name -c Status -c Networks > "$server_list_file"; then
+      python3 - "$server_list_file" "$STACK_NAME" "$COMPUTE_COUNT" "$STORAGE_COUNT" <<'PY'
+import json
+import re
+import sys
 
-      awk -v stack="$STACK_NAME" '
-        $1 ~ "^"stack"-storage_nodes-" && $2 == "ACTIVE" {
-          ip=$3; sub(/.*=/, "", ip); if (ip != "") print ip
-        }
-      ' "$server_list_file" | sort -u | head -n "$STORAGE_COUNT" > /opt/nfs_client/storage_nodes.txt
+server_list_file = sys.argv[1]
+stack_name = sys.argv[2]
+compute_count = int(sys.argv[3])
+storage_count = int(sys.argv[4])
 
-      awk -v stack="$STACK_NAME" '
-        $1 ~ "^"stack"-login_node-" && $2 == "ACTIVE" {
-          ip=$3; sub(/.*=/, "", ip); if (ip != "") print ip; exit
-        }
-      ' "$server_list_file" > /opt/nfs_client/login_node.txt
+def extract_ipv4(value):
+    text = value if isinstance(value, str) else str(value)
+    matches = re.findall(r'(?:\d{1,3}\.){3}\d{1,3}', text)
+  for ip in matches:
+    if ip.startswith('10.'):
+      return ip
+  return ''
+
+with open(server_list_file, 'r', encoding='utf-8') as file_obj:
+    rows = json.load(file_obj)
+
+compute_ips = []
+storage_ips = []
+login_ip = ''
+
+for row in rows:
+    name = str(row.get('Name', ''))
+    status = str(row.get('Status', ''))
+    if status != 'ACTIVE':
+        continue
+
+    ip = extract_ipv4(row.get('Networks', ''))
+    if not ip:
+        continue
+
+    if name.startswith(f"{stack_name}-compute_nodes-"):
+        compute_ips.append(ip)
+    elif name.startswith(f"{stack_name}-storage_nodes-"):
+        storage_ips.append(ip)
+    elif name.startswith(f"{stack_name}-login_node-") and not login_ip:
+        login_ip = ip
+
+compute_ips = sorted(set(compute_ips))[:compute_count]
+storage_ips = sorted(set(storage_ips))[:storage_count]
+
+with open('/opt/nfs_client/compute_nodes.txt', 'w', encoding='utf-8') as file_obj:
+    file_obj.write('\n'.join(compute_ips) + ('\n' if compute_ips else ''))
+
+with open('/opt/nfs_client/storage_nodes.txt', 'w', encoding='utf-8') as file_obj:
+    file_obj.write('\n'.join(storage_ips) + ('\n' if storage_ips else ''))
+
+with open('/opt/nfs_client/login_node.txt', 'w', encoding='utf-8') as file_obj:
+    file_obj.write((login_ip + '\n') if login_ip else '')
+PY
 
       FOUND_COMPUTE="$(wc -l < /opt/nfs_client/compute_nodes.txt | tr -d ' ')"
       FOUND_STORAGE="$(wc -l < /opt/nfs_client/storage_nodes.txt | tr -d ' ')"

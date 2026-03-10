@@ -1,9 +1,22 @@
 #!/bin/bash
 set -eux
 
-IS_LOGIN_NODE="__IS_LOGIN_NODE__"
-IS_COMPUTE_NODE="__IS_COMPUTE_NODE__"
-IS_STORAGE_NODE="__IS_STORAGE_NODE__"
+IS_LOGIN_NODE="${IS_LOGIN_NODE:-0}"
+IS_COMPUTE_NODE="${IS_COMPUTE_NODE:-0}"
+IS_STORAGE_NODE="${IS_STORAGE_NODE:-0}"
+PUBLIC_KEY="${PUBLIC_KEY:-}"
+PRIVATE_KEY="${PRIVATE_KEY:-}"
+NFS_SERVER_IP_INPUT="${NFS_SERVER_IP:-}"
+STACK_NAME_VALUE="${STACK_NAME:-}"
+COMPUTE_COUNT_VALUE="${COMPUTE_COUNT:-0}"
+STORAGE_COUNT_VALUE="${STORAGE_COUNT:-0}"
+OS_AUTH_TYPE_VALUE="${OS_AUTH_TYPE:-}"
+OS_AUTH_URL_VALUE="${OS_AUTH_URL:-}"
+OS_IDENTITY_API_VERSION_VALUE="${OS_IDENTITY_API_VERSION:-}"
+OS_REGION_NAME_VALUE="${OS_REGION_NAME:-}"
+OS_INTERFACE_VALUE="${OS_INTERFACE:-}"
+OS_APPLICATION_CREDENTIAL_ID_VALUE="${OS_APPLICATION_CREDENTIAL_ID:-}"
+OS_APPLICATION_CREDENTIAL_SECRET_VALUE="${OS_APPLICATION_CREDENTIAL_SECRET:-}"
 
 if [ "$IS_LOGIN_NODE" = "1" ]; then
   NODE_ROLE="login"
@@ -19,39 +32,25 @@ chmod 644 "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 DEBIAN_FRONTEND=noninteractive apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y git
-
-REPO_URL="__REPO_URL__"
-REPO_REF="__REPO_REF__"
-REPO_DIR="/opt/chameleoncloud"
-
-if [ -d "$REPO_DIR/.git" ]; then
-  git -C "$REPO_DIR" fetch --all
-  git -C "$REPO_DIR" checkout "$REPO_REF"
-  git -C "$REPO_DIR" pull --ff-only origin "$REPO_REF" || true
-else
-  git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$REPO_DIR"
-fi
-
-SCRIPT_ROOT="$REPO_DIR/orangefs/scripts"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_ROOT/lib/key_functions.sh"
 source "$SCRIPT_ROOT/lib/nfs_functions.sh"
 
 setup_node_role "$IS_LOGIN_NODE" "$IS_COMPUTE_NODE" "$IS_STORAGE_NODE"
-setup_ssh_keys "__PUBLIC_KEY__" "__PRIVATE_KEY__"
+setup_ssh_keys "$PUBLIC_KEY" "$PRIVATE_KEY"
 install_nfs_client_packages
 
 if [ "$IS_LOGIN_NODE" = "1" ]; then
   setup_login_nfs_server
   prepare_post_logs
-  write_post_env "__STACK_NAME__" "__COMPUTE_COUNT__" "__STORAGE_COUNT__" "__OS_AUTH_TYPE__" "__OS_AUTH_URL__" "__OS_IDENTITY_API_VERSION__" "__OS_REGION_NAME__" "__OS_INTERFACE__" "__OS_APPLICATION_CREDENTIAL_ID__" "__OS_APPLICATION_CREDENTIAL_SECRET__"
+  write_post_env "$STACK_NAME_VALUE" "$COMPUTE_COUNT_VALUE" "$STORAGE_COUNT_VALUE" "$OS_AUTH_TYPE_VALUE" "$OS_AUTH_URL_VALUE" "$OS_IDENTITY_API_VERSION_VALUE" "$OS_REGION_NAME_VALUE" "$OS_INTERFACE_VALUE" "$OS_APPLICATION_CREDENTIAL_ID_VALUE" "$OS_APPLICATION_CREDENTIAL_SECRET_VALUE"
 
   chmod +x "$SCRIPT_ROOT/datacrumbs-post-nodes.sh"
   nohup bash "$SCRIPT_ROOT/datacrumbs-post-nodes.sh" >> /var/log/datacrumbs-post-nodes-launch.log 2>&1 &
 
   NFS_SERVER_IP="$(resolve_nfs_server_ip)"
 else
-  NFS_SERVER_IP="__NFS_SERVER_IP__"
+  NFS_SERVER_IP="$NFS_SERVER_IP_INPUT"
 fi
 
 setup_common_mount_dirs

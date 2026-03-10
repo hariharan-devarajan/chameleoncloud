@@ -28,8 +28,44 @@ resources:
       scheduler_hints: { reservation: { get_param: reservation_id } }
       user_data:
         str_replace:
-          template: &common_node_bootstrap
-            { get_file: scripts/common_node_bootstrap.sh }
+          template: &common_node_bootstrap |
+            #!/bin/bash
+            set -eux
+
+            DEBIAN_FRONTEND=noninteractive apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y git
+
+            REPO_URL="__REPO_URL__"
+            REPO_REF="__REPO_REF__"
+            REPO_DIR="/opt/chameleoncloud"
+
+            if [ -d "$REPO_DIR/.git" ]; then
+              git -C "$REPO_DIR" fetch --all
+              git -C "$REPO_DIR" checkout "$REPO_REF"
+              git -C "$REPO_DIR" pull --ff-only origin "$REPO_REF" || true
+            else
+              git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$REPO_DIR"
+            fi
+
+            export PUBLIC_KEY="__PUBLIC_KEY__"
+            export PRIVATE_KEY="__PRIVATE_KEY__"
+            export IS_LOGIN_NODE="__IS_LOGIN_NODE__"
+            export IS_COMPUTE_NODE="__IS_COMPUTE_NODE__"
+            export IS_STORAGE_NODE="__IS_STORAGE_NODE__"
+            export NFS_SERVER_IP="__NFS_SERVER_IP__"
+            export STACK_NAME="__STACK_NAME__"
+            export COMPUTE_COUNT="__COMPUTE_COUNT__"
+            export STORAGE_COUNT="__STORAGE_COUNT__"
+            export OS_AUTH_TYPE="__OS_AUTH_TYPE__"
+            export OS_AUTH_URL="__OS_AUTH_URL__"
+            export OS_IDENTITY_API_VERSION="__OS_IDENTITY_API_VERSION__"
+            export OS_REGION_NAME="__OS_REGION_NAME__"
+            export OS_INTERFACE="__OS_INTERFACE__"
+            export OS_APPLICATION_CREDENTIAL_ID="__OS_APPLICATION_CREDENTIAL_ID__"
+            export OS_APPLICATION_CREDENTIAL_SECRET="__OS_APPLICATION_CREDENTIAL_SECRET__"
+
+            chmod +x "$REPO_DIR/orangefs/scripts/common_node_bootstrap.sh"
+            bash "$REPO_DIR/orangefs/scripts/common_node_bootstrap.sh"
           params:
             __PUBLIC_KEY__: { get_param: key_public }
             __PRIVATE_KEY__: { get_param: key_private }
