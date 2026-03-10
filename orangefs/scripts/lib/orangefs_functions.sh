@@ -180,6 +180,11 @@ setup_orangefs_directories() {
   chown -R cc:cc /mnt/orangefs
   chown -R cc:cc /opt/orangefs/logs
 
+  STORAGE_SERVER_IP="$(head -n1 /opt/nfs_client/orangefs_server_list.txt || true)"
+  grep -v orangefs /etc/pvfs2tab > /etc/pvfs2tab.tmp
+  mv /etc/pvfs2tab.tmp /etc/pvfs2tab
+  grep -q "tcp://${STORAGE_SERVER_IP}:3334/orangefs /mnt/orangefs pvfs2" /etc/pvfs2tab 2>/dev/null || echo "tcp://${STORAGE_SERVER_IP}:3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0" >> /etc/pvfs2tab
+
   echo "[$(date -Is)] STATUS=SUCCESS OrangeFS directories created"
 }
 
@@ -429,6 +434,8 @@ deploy_orangefs_servers() {
      export ORANGEFS_PATH=\"${ofs_path}\" && \
      mkdir -p '/mnt/nvme/orangefs_data' && \
      mkdir -p '/mnt/nvme/orangefs_metadata' && \
+     rm -rf /mnt/nvme/orangefs_data/* /mnt/nvme/orangefs_metadata/* && \
+     rm /opt/orangefs/logs/orangefs.log && \
      ${ofs_path}/sbin/pvfs2-server -f -a \$(hostname) \"${conf_file}\" && \
      ${ofs_path}/sbin/pvfs2-server -a \$(hostname) \"${conf_file}\""; then
     log_error "Failed to configure OrangeFS servers"

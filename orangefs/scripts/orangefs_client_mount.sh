@@ -27,7 +27,7 @@ log_info "Loading OrangeFS kernel module"
 sudo modprobe orangefs
 
 log_info "Loading Lmod environment"
-source /etc/profile.d/modules.sh
+source /etc/profile.d/lmod.sh
 
 log_info "Loading OrangeFS module"
 module load orangefs
