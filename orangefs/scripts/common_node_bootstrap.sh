@@ -86,9 +86,7 @@ setup_common_mount_dirs
 configure_nfs_firewall
 log_info "Prepared mount directories and firewall rules"
 
-if [ "$IS_LOGIN_NODE" = "1" ]; then
-  link_login_shared_mount
-  log_info "Linked /opt/nfs_client to /opt/shared on login node"
-fi
+setup_nfs_client_mount "$NFS_SERVER_IP"
+log_info "Configured NFS client mount using server IP ${NFS_SERVER_IP}"
 
 log_info "Bootstrap completed for role ${NODE_ROLE}"

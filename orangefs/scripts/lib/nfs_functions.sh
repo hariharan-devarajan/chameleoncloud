@@ -79,3 +79,32 @@ link_login_shared_mount() {
   rm -rf /opt/nfs_client
   ln -s /opt/shared /opt/nfs_client
 }
+
+setup_nfs_client_mount() {
+    local nfs_server_ip="$1"
+
+    if [ -z "$nfs_server_ip" ]; then
+    echo "[$(date -Is)] STATUS=ERROR NFS server IP is empty; cannot configure NFS client mount"
+    return 1
+    fi
+
+    mkdir -p /opt/nfs_client
+
+    grep -q "^${nfs_server_ip}:/opt/shared[[:space:]]\+/opt/nfs_client[[:space:]]\+nfs" /etc/fstab || \
+
+    echo "${nfs_server_ip}:/opt/shared    /opt/nfs_client    nfs" >> /etc/fstab
+
+    mount -a
+
+    if ! mountpoint -q /opt/nfs_client; then
+        echo "[$(date -Is)] STATUS=ERROR Failed to mount /opt/nfs_client"
+        return 1
+    fi
+
+    if [ -z "$(ls -A /opt/nfs_client)" ]; then
+        echo "[$(date -Is)] STATUS=ERROR /opt/nfs_client is empty after mounting"
+        return 1
+    fi
+    echo "[$(date -Is)] STATUS=SUCCESS NFS client mount configured and verified at /opt/nfs_client"
+    return 0
+}
