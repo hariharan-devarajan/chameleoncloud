@@ -49,11 +49,8 @@ resources:
               { get_param: os_application_credential_id }
             __OS_APPLICATION_CREDENTIAL_SECRET__:
               { get_param: os_application_credential_secret }
-            __KEY_FUNCTIONS__: { get_file: scripts/lib/key_functions.sh }
-            __NFS_FUNCTIONS__: { get_file: scripts/lib/nfs_functions.sh }
-            __POST_NODES_FUNCTIONS__:
-              { get_file: scripts/lib/post_nodes_functions.sh }
-            __POST_NODES_SCRIPT__: { get_file: scripts/datacrumbs-post-nodes.sh }
+            __REPO_URL__: { get_param: repo_url }
+            __REPO_REF__: { get_param: repo_ref }
 
   login_node_ip_association:
     type: OS::Neutron::FloatingIPAssociation
@@ -95,11 +92,8 @@ resources:
                 __OS_INTERFACE__: ""
                 __OS_APPLICATION_CREDENTIAL_ID__: ""
                 __OS_APPLICATION_CREDENTIAL_SECRET__: ""
-                __KEY_FUNCTIONS__: { get_file: scripts/lib/key_functions.sh }
-                __NFS_FUNCTIONS__: { get_file: scripts/lib/nfs_functions.sh }
-                __POST_NODES_FUNCTIONS__:
-                  { get_file: scripts/lib/post_nodes_functions.sh }
-                __POST_NODES_SCRIPT__: { get_file: scripts/datacrumbs-post-nodes.sh }
+                __REPO_URL__: { get_param: repo_url }
+                __REPO_REF__: { get_param: repo_ref }
 
   storage_nodes:
     type: OS::Heat::ResourceGroup
@@ -135,11 +129,8 @@ resources:
                 __OS_INTERFACE__: ""
                 __OS_APPLICATION_CREDENTIAL_ID__: ""
                 __OS_APPLICATION_CREDENTIAL_SECRET__: ""
-                __KEY_FUNCTIONS__: { get_file: scripts/lib/key_functions.sh }
-                __NFS_FUNCTIONS__: { get_file: scripts/lib/nfs_functions.sh }
-                __POST_NODES_FUNCTIONS__:
-                  { get_file: scripts/lib/post_nodes_functions.sh }
-                __POST_NODES_SCRIPT__: { get_file: scripts/datacrumbs-post-nodes.sh }
+                __REPO_URL__: { get_param: repo_url }
+                __REPO_REF__: { get_param: repo_ref }
 
 parameters:
   key_public:
@@ -230,6 +221,16 @@ parameters:
     type: string
     description: OpenStack network used by all nodes
     default: sharednet1
+
+  repo_url:
+    type: string
+    description: Git repository URL containing orangefs scripts
+    default: https://github.com/hariharan-devarajan/chameleoncloud.git
+
+  repo_ref:
+    type: string
+    description: Git branch or tag to checkout for orangefs scripts
+    default: dev
 
 outputs:
   login_node_public_ip:
