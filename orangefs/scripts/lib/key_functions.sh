@@ -42,6 +42,15 @@ setup_ssh_keys() {
 Host 10.52.*
     StrictHostKeyChecking no
     UserKnownHostsFile /dev/null
+Host *compute*
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+Host *storage*
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+Host *login*
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
 EOF
 
     chown -R "$owner" "$ssh_dir"
