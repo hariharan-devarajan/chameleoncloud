@@ -70,16 +70,19 @@ setup_ssh_keys_multi() {
   local public_key="$1"
   local private_key="$2"
   local users="$3"
+  local user_list=()
+  local user
 
   if [ -z "$users" ]; then
     return 0
   fi
 
-  while IFS=',' read -r user; do
+  IFS=',' read -r -a user_list <<< "$users"
+  for user in "${user_list[@]}"; do
     user=$(echo "$user" | xargs)  # trim whitespace
     [ -z "$user" ] && continue
     setup_ssh_keys_for_user "$public_key" "$private_key" "$user"
-  done <<< "$users"
+  done
 }
 
 # Determine node role from indicator flags
