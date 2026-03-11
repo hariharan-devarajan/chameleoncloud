@@ -206,6 +206,7 @@ datacrumbs_post_nodes_main() {
   setup_orangefs_module
   install_parallel_ssh
   install_expect_package
+  configure_orangefs_firewall
 
   if [ "$IS_LOGIN_NODE" = "1" ]; then
     log_info "Running OrangeFS cluster deployment as user cc"
@@ -226,7 +227,6 @@ datacrumbs_post_nodes_main() {
   fi
 
   setup_orangefs_directories
-  configure_orangefs_firewall
 
   if [ "$IS_LOGIN_NODE" = "1" ]; then
     log_info "Login node OrangeFS client configured"
