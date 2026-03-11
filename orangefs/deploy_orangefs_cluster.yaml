@@ -97,6 +97,7 @@ resources:
             export OS_APPLICATION_CREDENTIAL_SECRET="__OS_APPLICATION_CREDENTIAL_SECRET__"
             export OPENSTACK_TIMEOUT_SECONDS="__OPENSTACK_TIMEOUT_SECONDS__"
             export MOUNT_SSH_TIMEOUT_SECONDS="__MOUNT_SSH_TIMEOUT_SECONDS__"
+            export SCRIPT_ROOT="$SCRIPT_ROOT"
 
             log_info "Environment variables exported"
 
