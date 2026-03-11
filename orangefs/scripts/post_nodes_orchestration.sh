@@ -103,7 +103,7 @@ write_post_nodes_environment_file() {
 # Function: Load Post-Nodes Environment Configuration
 # ============================================================================
 load_post_nodes_env() {
-  local env_file="${1:-/etc/datacrumbs-post.env}"
+  local env_file="${1:-/var/run/datacrumbs/post_nodes.env}"
   local openstack_timeout="${2:-${DEFAULT_OPENSTACK_TIMEOUT_SECONDS}}"
   local mount_ssh_timeout="${3:-${DEFAULT_MOUNT_SSH_TIMEOUT_SECONDS}}"
 
@@ -477,7 +477,7 @@ main_post_nodes_orchestration() {
 # ============================================================================
 main() {
   # Load configuration from environment file
-  local env_file="${1:-/etc/datacrumbs-post.env}"
+  local env_file="${1:-/var/run/datacrumbs/post_nodes.env}"
   local stack_name="${STACK_NAME:-}"
   local compute_count="${COMPUTE_COUNT:-0}"
   local storage_count="${STORAGE_COUNT:-0}"

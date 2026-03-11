@@ -132,7 +132,7 @@ RUNTIME_DIR="/var/run/datacrumbs"
 [2026-03-10T12:02:00.678901+00:00] STATUS=INFO Stage 2: SSH Keys and Directory Setup
 [2026-03-10T12:03:00.789012+00:00] STATUS=INFO Stage 3: Install Base NFS Packages
 [2026-03-10T12:04:00.890123+00:00] STATUS=INFO Stage 4: NFS Server Setup (Login Node)
-[2026-03-10T12:05:00.901234+00:00] STATUS=INFO Post-nodes environment file written to /etc/datacrumbs-post.env
+[2026-03-10T12:05:00.901234+00:00] STATUS=INFO Post-nodes environment file written to /var/run/datacrumbs/post_nodes.env
 [2026-03-10T12:05:05.012345+00:00] STATUS=INFO Post-nodes processing script started in background
 [2026-03-10T12:06:00.123456+00:00] STATUS=INFO Stage 5: Configure NFS Client Mount
 [2026-03-10T12:07:00.234567+00:00] STATUS=SUCCESS NFS client mount configured and verified at /opt/nfs_client
@@ -239,3 +239,6 @@ This ensures:
 - The deployment user (`cc` by default) can read and write logs
 - All users can read logs for monitoring
 - Environment files with sensitive info are readable only by root
+
+
+/var/lib/cloud/instance/scripts/part-004
