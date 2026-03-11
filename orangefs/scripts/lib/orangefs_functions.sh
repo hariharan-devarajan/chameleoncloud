@@ -190,14 +190,38 @@ setup_orangefs_directories() {
 configure_orangefs_firewall() {
   local failed=0
 
-  apply_orangefs_port_rule() {
-    local port="$1"
-
-    if firewall-cmd --permanent --add-port="${port}" >/dev/null 2>&1; then
+  run_firewall_cmd() {
+    if firewall-cmd "$@" >/dev/null 2>&1; then
       return 0
     fi
 
-    if firewall-cmd --add-port="${port}" >/dev/null 2>&1; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n firewall-cmd "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    return 1
+  }
+
+  run_systemctl_cmd() {
+    if systemctl "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if command -v sudo >/dev/null 2>&1 && sudo -n systemctl "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    return 1
+  }
+
+  apply_orangefs_port_rule() {
+    local port="$1"
+
+    if run_firewall_cmd --permanent --add-port="${port}"; then
+      return 0
+    fi
+
+    if run_firewall_cmd --add-port="${port}"; then
       log_warning "Applied runtime-only firewall rule for ${port}"
       return 0
     fi
@@ -210,10 +234,10 @@ configure_orangefs_firewall() {
     return 1
   fi
 
-  if ! systemctl is-active --quiet firewalld 2>/dev/null; then
+  if ! run_systemctl_cmd is-active --quiet firewalld; then
     log_warning "firewalld is not active; attempting to start it"
-    systemctl enable firewalld >/dev/null 2>&1 || true
-    systemctl start firewalld >/dev/null 2>&1 || true
+    run_systemctl_cmd enable firewalld || true
+    run_systemctl_cmd start firewalld || true
   fi
 
   if ! apply_orangefs_port_rule "3334/tcp"; then
@@ -226,11 +250,11 @@ configure_orangefs_firewall() {
     failed=1
   fi
 
-  if ! firewall-cmd --reload >/dev/null 2>&1; then
+  if ! run_firewall_cmd --reload; then
     log_warning "Failed to reload firewall configuration; attempting firewalld restart"
-    systemctl restart firewalld >/dev/null 2>&1 || true
+    run_systemctl_cmd restart firewalld || true
 
-    if firewall-cmd --reload >/dev/null 2>&1; then
+    if run_firewall_cmd --reload; then
       log_info "Firewall reload succeeded after restart"
     else
       log_warning "Firewall reload still failing after restart"
