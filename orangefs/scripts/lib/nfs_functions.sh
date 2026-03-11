@@ -64,6 +64,8 @@ setup_common_mount_dirs() {
   mkdir -p /mnt/nvme/orangefs_{data,meta}
   mkdir -p /mnt/orangefs
   mkdir -p /opt/nfs_client
+  chown -R cc:cc -R /mnt 
+  chown cc:cc /opt/nfs_client
 }
 
 configure_nfs_firewall() {
