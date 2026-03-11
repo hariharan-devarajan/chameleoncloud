@@ -28,31 +28,61 @@ resources:
       scheduler_hints: { reservation: { get_param: reservation_id } }
       user_data:
         str_replace:
-          template: &common_node_bootstrap |
+          template: &orchestration_bootstrap |
             #!/bin/bash
             set -eux
+
+            # Setup runtime and logging directories first
+            mkdir -p /var/run/datacrumbs
+            mkdir -p /var/log/datacrumbs
+            chmod 755 /var/run/datacrumbs
+            chmod 755 /var/log/datacrumbs
+
+            # Create main Heat bootstrap log
+            HEAT_LOG="/var/log/datacrumbs/heat-bootstrap.log"
+            touch "$HEAT_LOG"
+            chmod 644 "$HEAT_LOG"
+            exec > >(tee -a "$HEAT_LOG") 2>&1
+
+            echo "[$(date -Is)] Heat bootstrap started"
 
             DEBIAN_FRONTEND=noninteractive apt-get update
             DEBIAN_FRONTEND=noninteractive apt-get install -y git
 
             REPO_URL="__REPO_URL__"
             REPO_REF="__REPO_REF__"
-            REPO_DIR="/opt/shared/chameleoncloud"
+            SCRIPT_ROOT="/opt/shared/chameleoncloud"
 
-            if [ -d "$REPO_DIR/.git" ]; then
-              git -C "$REPO_DIR" fetch --all
-              git -C "$REPO_DIR" checkout "$REPO_REF"
-              git -C "$REPO_DIR" pull --ff-only origin "$REPO_REF" || true
+            if [ -d "$SCRIPT_ROOT/.git" ]; then
+              git -C "$SCRIPT_ROOT" fetch --all
+              git -C "$SCRIPT_ROOT" checkout "$REPO_REF"
+              git -C "$SCRIPT_ROOT" pull --ff-only origin "$REPO_REF" || true
             else
-              git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$REPO_DIR"
+              git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$SCRIPT_ROOT"
             fi
 
-            export PUBLIC_KEY="__PUBLIC_KEY__"
-            export PRIVATE_KEY="__PRIVATE_KEY__"
+            echo "[$(date -Is)] Repository cloned successfully"
+
+
+            export LOG_LEVEL="__LOG_LEVEL__"
+            # Source common logging library
+            source "$SCRIPT_ROOT/orangefs/scripts/lib/logging.sh"
+            log_startup_info
+            enable_trace_mode
+
             export IS_LOGIN_NODE="__IS_LOGIN_NODE__"
             export IS_COMPUTE_NODE="__IS_COMPUTE_NODE__"
             export IS_STORAGE_NODE="__IS_STORAGE_NODE__"
+            export TARGET_USER="__TARGET_USER__"
+            export PUBLIC_KEY="__PUBLIC_KEY__"
+            export PRIVATE_KEY="__PRIVATE_KEY__"
             export NFS_SERVER_IP="__NFS_SERVER_IP__"
+            export NFS_MOUNT_POINT="__NFS_MOUNT_POINT__"
+            export NFS_EXPORT_DIR="__NFS_EXPORT_DIR__"
+            export ORANGEFS_DATA_DIR="__ORANGEFS_DATA_DIR__"
+            export ORANGEFS_METADATA_DIR="__ORANGEFS_METADATA_DIR__"
+            export ORANGEFS_MOUNT_DIR="__ORANGEFS_MOUNT_DIR__"
+            export ORANGEFS_LOG_DIR="__ORANGEFS_LOG_DIR__"
             export STACK_NAME="__STACK_NAME__"
             export COMPUTE_COUNT="__COMPUTE_COUNT__"
             export STORAGE_COUNT="__STORAGE_COUNT__"
@@ -66,15 +96,31 @@ resources:
             export OPENSTACK_TIMEOUT_SECONDS="__OPENSTACK_TIMEOUT_SECONDS__"
             export MOUNT_SSH_TIMEOUT_SECONDS="__MOUNT_SSH_TIMEOUT_SECONDS__"
 
-            chmod +x "$REPO_DIR/orangefs/scripts/common_node_bootstrap.sh"
-            bash "$REPO_DIR/orangefs/scripts/common_node_bootstrap.sh"
+            log_info "Environment variables exported"
+
+            chmod +x "$SCRIPT_ROOT/orangefs/scripts/node_orchestration.sh"
+            chmod +x "$SCRIPT_ROOT/orangefs/scripts/post_nodes_orchestration.sh"
+
+            log_info "Running node orchestration"
+            bash "$SCRIPT_ROOT/orangefs/scripts/node_orchestration.sh"
+
+            echo "[$(date -Is)] Heat bootstrap completed successfully"
           params:
+            __REPO_URL__: { get_param: repo_url }
+            __REPO_REF__: { get_param: repo_ref }
+            __TARGET_USER__: { get_param: target_user }
             __PUBLIC_KEY__: { get_param: key_public }
             __PRIVATE_KEY__: { get_param: key_private }
             __IS_LOGIN_NODE__: "1"
             __IS_COMPUTE_NODE__: "0"
             __IS_STORAGE_NODE__: "0"
             __NFS_SERVER_IP__: ""
+            __NFS_MOUNT_POINT__: { get_param: nfs_mount_point }
+            __NFS_EXPORT_DIR__: { get_param: nfs_export_directory }
+            __ORANGEFS_DATA_DIR__: { get_param: orangefs_data_directory }
+            __ORANGEFS_METADATA_DIR__: { get_param: orangefs_metadata_directory }
+            __ORANGEFS_MOUNT_DIR__: { get_param: orangefs_mount_directory }
+            __ORANGEFS_LOG_DIR__: { get_param: orangefs_log_directory }
             __STACK_NAME__: { get_param: "OS::stack_name" }
             __COMPUTE_COUNT__: { get_param: compute_node_count }
             __STORAGE_COUNT__: { get_param: storage_node_count }
@@ -87,11 +133,10 @@ resources:
               { get_param: os_application_credential_id }
             __OS_APPLICATION_CREDENTIAL_SECRET__:
               { get_param: os_application_credential_secret }
-            __REPO_URL__: { get_param: repo_url }
-            __REPO_REF__: { get_param: repo_ref }
             __OPENSTACK_TIMEOUT_SECONDS__: { get_param: openstack_timeout_seconds }
             __MOUNT_SSH_TIMEOUT_SECONDS__:
               { get_param: mount_ssh_timeout_seconds }
+            __LOG_LEVEL__: { get_param: log_level }
 
   login_node_ip_association:
     type: OS::Neutron::FloatingIPAssociation
@@ -115,14 +160,23 @@ resources:
           scheduler_hints: { reservation: { get_param: reservation_id } }
           user_data:
             str_replace:
-              template: *common_node_bootstrap
+              template: *orchestration_bootstrap
               params:
+                __REPO_URL__: { get_param: repo_url }
+                __REPO_REF__: { get_param: repo_ref }
+                __TARGET_USER__: { get_param: target_user }
                 __NFS_SERVER_IP__: { get_attr: [login_node, first_address] }
                 __PUBLIC_KEY__: { get_param: key_public }
                 __PRIVATE_KEY__: { get_param: key_private }
                 __IS_LOGIN_NODE__: "0"
                 __IS_COMPUTE_NODE__: "1"
                 __IS_STORAGE_NODE__: "0"
+                __NFS_MOUNT_POINT__: { get_param: nfs_mount_point }
+                __NFS_EXPORT_DIR__: { get_param: nfs_export_directory }
+                __ORANGEFS_DATA_DIR__: { get_param: orangefs_data_directory }
+                __ORANGEFS_METADATA_DIR__: { get_param: orangefs_metadata_directory }
+                __ORANGEFS_MOUNT_DIR__: { get_param: orangefs_mount_directory }
+                __ORANGEFS_LOG_DIR__: { get_param: orangefs_log_directory }
                 __STACK_NAME__: ""
                 __COMPUTE_COUNT__: "0"
                 __STORAGE_COUNT__: "0"
@@ -133,12 +187,11 @@ resources:
                 __OS_INTERFACE__: ""
                 __OS_APPLICATION_CREDENTIAL_ID__: ""
                 __OS_APPLICATION_CREDENTIAL_SECRET__: ""
-                __REPO_URL__: { get_param: repo_url }
-                __REPO_REF__: { get_param: repo_ref }
                 __OPENSTACK_TIMEOUT_SECONDS__:
                   { get_param: openstack_timeout_seconds }
                 __MOUNT_SSH_TIMEOUT_SECONDS__:
                   { get_param: mount_ssh_timeout_seconds }
+                __LOG_LEVEL__: { get_param: log_level }
 
   storage_nodes:
     type: OS::Heat::ResourceGroup
@@ -156,14 +209,23 @@ resources:
           scheduler_hints: { reservation: { get_param: reservation_id } }
           user_data:
             str_replace:
-              template: *common_node_bootstrap
+              template: *orchestration_bootstrap
               params:
+                __REPO_URL__: { get_param: repo_url }
+                __REPO_REF__: { get_param: repo_ref }
+                __TARGET_USER__: { get_param: target_user }
                 __NFS_SERVER_IP__: { get_attr: [login_node, first_address] }
                 __PUBLIC_KEY__: { get_param: key_public }
                 __PRIVATE_KEY__: { get_param: key_private }
                 __IS_LOGIN_NODE__: "0"
                 __IS_COMPUTE_NODE__: "0"
                 __IS_STORAGE_NODE__: "1"
+                __NFS_MOUNT_POINT__: { get_param: nfs_mount_point }
+                __NFS_EXPORT_DIR__: { get_param: nfs_export_directory }
+                __ORANGEFS_DATA_DIR__: { get_param: orangefs_data_directory }
+                __ORANGEFS_METADATA_DIR__: { get_param: orangefs_metadata_directory }
+                __ORANGEFS_MOUNT_DIR__: { get_param: orangefs_mount_directory }
+                __ORANGEFS_LOG_DIR__: { get_param: orangefs_log_directory }
                 __STACK_NAME__: ""
                 __COMPUTE_COUNT__: "0"
                 __STORAGE_COUNT__: "0"
@@ -174,12 +236,11 @@ resources:
                 __OS_INTERFACE__: ""
                 __OS_APPLICATION_CREDENTIAL_ID__: ""
                 __OS_APPLICATION_CREDENTIAL_SECRET__: ""
-                __REPO_URL__: { get_param: repo_url }
-                __REPO_REF__: { get_param: repo_ref }
                 __OPENSTACK_TIMEOUT_SECONDS__:
                   { get_param: openstack_timeout_seconds }
                 __MOUNT_SSH_TIMEOUT_SECONDS__:
                   { get_param: mount_ssh_timeout_seconds }
+                __LOG_LEVEL__: { get_param: log_level }
 
 parameters:
   key_public:
@@ -191,6 +252,11 @@ parameters:
     type: string
     description: Private key content for all nodes (from env.yaml)
     hidden: true
+
+  target_user:
+    type: string
+    description: Target user for deployment (owns all directories and processes)
+    default: cc
 
   compute_node_count:
     type: number
@@ -271,6 +337,36 @@ parameters:
     description: OpenStack network used by all nodes
     default: sharednet1
 
+  nfs_mount_point:
+    type: string
+    description: NFS client mount point on all nodes
+    default: /opt/nfs_client
+
+  nfs_export_directory:
+    type: string
+    description: NFS export directory on login node
+    default: /opt/shared
+
+  orangefs_data_directory:
+    type: string
+    description: OrangeFS data storage directory
+    default: /mnt/nvme/orangefs_data
+
+  orangefs_metadata_directory:
+    type: string
+    description: OrangeFS metadata storage directory
+    default: /mnt/nvme/orangefs_metadata
+
+  orangefs_mount_directory:
+    type: string
+    description: OrangeFS client mount point
+    default: /mnt/orangefs
+
+  orangefs_log_directory:
+    type: string
+    description: OrangeFS logs directory
+    default: /opt/orangefs/logs
+
   repo_url:
     type: string
     description: Git repository URL containing orangefs scripts
@@ -290,6 +386,13 @@ parameters:
     type: number
     description: Timeout in seconds for per-node SSH mount configuration attempts
     default: 1800
+
+  log_level:
+    type: string
+    description: Logging level (TRACE, DEBUG, INFO, WARNING, ERROR, OFF)
+    default: INFO
+    constraints:
+      - allowed_values: [TRACE, DEBUG, INFO, WARNING, ERROR, OFF]
 
 outputs:
   login_node_public_ip:
