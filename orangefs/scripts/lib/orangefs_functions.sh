@@ -190,26 +190,61 @@ setup_orangefs_directories() {
 configure_orangefs_firewall() {
   local failed=0
 
-  if ! firewall-cmd --permanent --add-port=3334/tcp 2>/dev/null; then
-    log_warning "Failed to add port 3334/tcp; firewall may not be active"
+  apply_orangefs_port_rule() {
+    local port="$1"
+
+    if firewall-cmd --permanent --add-port="${port}" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if firewall-cmd --add-port="${port}" >/dev/null 2>&1; then
+      log_warning "Applied runtime-only firewall rule for ${port}"
+      return 0
+    fi
+
+    return 1
+  }
+
+  if ! command -v firewall-cmd >/dev/null 2>&1; then
+    log_error "firewall-cmd not available; OrangeFS firewall setup is mandatory"
+    return 1
+  fi
+
+  if ! systemctl is-active --quiet firewalld 2>/dev/null; then
+    log_warning "firewalld is not active; attempting to start it"
+    systemctl enable firewalld >/dev/null 2>&1 || true
+    systemctl start firewalld >/dev/null 2>&1 || true
+  fi
+
+  if ! apply_orangefs_port_rule "3334/tcp"; then
+    log_warning "Failed to add port 3334/tcp"
     failed=1
   fi
 
-  if ! firewall-cmd --permanent --add-port=3335/tcp 2>/dev/null; then
-    log_warning "Failed to add port 3335/tcp; firewall may not be active"
+  if ! apply_orangefs_port_rule "3335/tcp"; then
+    log_warning "Failed to add port 3335/tcp"
     failed=1
   fi
 
-  if ! firewall-cmd --reload 2>/dev/null; then
-    log_warning "Failed to reload firewall configuration"
-    failed=1
+  if ! firewall-cmd --reload >/dev/null 2>&1; then
+    log_warning "Failed to reload firewall configuration; attempting firewalld restart"
+    systemctl restart firewalld >/dev/null 2>&1 || true
+
+    if firewall-cmd --reload >/dev/null 2>&1; then
+      log_info "Firewall reload succeeded after restart"
+    else
+      log_warning "Firewall reload still failing after restart"
+      failed=1
+    fi
   fi
 
   if [ "$failed" -eq 0 ]; then
     log_info "OrangeFS firewall rules configured successfully"
   else
-    log_warning "Some firewall rules may not have been applied"
+    log_warning "OrangeFS firewall rules were partially applied after retries"
   fi
+
+  return 0
 }
 
 
