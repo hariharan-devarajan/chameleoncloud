@@ -463,7 +463,7 @@ deploy_orangefs_servers() {
        rm -f \"\${log_dir}/orangefs.log\" && \
        ${ofs_path}/sbin/pvfs2-server -f -a \$(hostname) \"${config_file}\" && \
        ${ofs_path}/sbin/pvfs2-server -a \$(hostname) \"${config_file}\" && \
-       source ${SCRIPT_ROOT}/orangefs/scripts/lib/orangefs_functions.sh && configure_orangefs_firewall; \
+       source ${script_root}/orangefs/scripts/lib/orangefs_functions.sh && configure_orangefs_firewall; \
      } > \"\${log_file}\" 2>&1"; then
     log_error "Failed to configure OrangeFS servers"
     return 1
