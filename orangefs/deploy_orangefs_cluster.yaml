@@ -56,13 +56,11 @@ resources:
             SCRIPT_ROOT="/opt/shared/chameleoncloud"
 
             if [ -d "$SCRIPT_ROOT/.git" ]; then
-              git -C "$SCRIPT_ROOT" fetch --all
-              git -C "$SCRIPT_ROOT" checkout "$REPO_REF"
-              git -C "$SCRIPT_ROOT" pull --ff-only origin "$REPO_REF" || true
+              git -C "$SCRIPT_ROOT" pull || true
             else
               git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$SCRIPT_ROOT"
             fi
-            sudo chown -R "$TARGET_USER":"$TARGET_USER" "$SCRIPT_ROOT"
+            sudo chown -R "$TARGET_USER":"$TARGET_USER" "$SCRIPT_ROOT" || true
             echo "[$(date -Is)] Repository cloned successfully"
 
 
