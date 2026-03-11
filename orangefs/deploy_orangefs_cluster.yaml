@@ -51,6 +51,8 @@ resources:
 
             REPO_URL="__REPO_URL__"
             REPO_REF="__REPO_REF__"
+            export LOG_LEVEL="__LOG_LEVEL__"
+            TARGET_USER="__TARGET_USER__"
             SCRIPT_ROOT="/opt/shared/chameleoncloud"
 
             if [ -d "$SCRIPT_ROOT/.git" ]; then
@@ -64,16 +66,16 @@ resources:
             echo "[$(date -Is)] Repository cloned successfully"
 
 
-            export LOG_LEVEL="__LOG_LEVEL__"
             # Source common logging library
             source "$SCRIPT_ROOT/orangefs/scripts/lib/logging.sh"
             log_startup_info
             enable_trace_mode
 
+            export LOG_LEVEL="__LOG_LEVEL__"
+            export TARGET_USER="__TARGET_USER__"
             export IS_LOGIN_NODE="__IS_LOGIN_NODE__"
             export IS_COMPUTE_NODE="__IS_COMPUTE_NODE__"
             export IS_STORAGE_NODE="__IS_STORAGE_NODE__"
-            export TARGET_USER="__TARGET_USER__"
             export PUBLIC_KEY="__PUBLIC_KEY__"
             export PRIVATE_KEY="__PRIVATE_KEY__"
             export NFS_SERVER_IP="__NFS_SERVER_IP__"
