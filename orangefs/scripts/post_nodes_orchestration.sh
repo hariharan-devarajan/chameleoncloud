@@ -350,9 +350,9 @@ main_post_nodes_orchestration() {
 
   # Source function libraries
   local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  source "${script_root}/lib/nfs_functions_refactored.sh"
+  source "${script_root}/lib/nfs_functions.sh"
   source "${script_root}/lib/directory_structures.sh"
-  source "${script_root}/lib/orangefs_functions_refactored.sh"
+  source "${script_root}/lib/orangefs_functions.sh"
 
   # Ensure directories exist
   mkdir -p "$nfs_mount_point"
@@ -430,7 +430,7 @@ main_post_nodes_orchestration() {
     ORANGEFS_LOG_DIR="$orangefs_log_dir" \
     bash -lc '
       source "${SCRIPT_ROOT}/lib/logging.sh"
-      source "${SCRIPT_ROOT}/lib/orangefs_functions_refactored.sh"
+      source "${SCRIPT_ROOT}/lib/orangefs_functions.sh"
       create_orangefs_node_lists \
         "${NFS_MOUNT_POINT}/storage_nodes.txt" \
         "${NFS_MOUNT_POINT}/all_nodes.txt" \

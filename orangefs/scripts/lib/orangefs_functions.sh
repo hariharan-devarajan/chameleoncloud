@@ -1,61 +1,25 @@
 #!/bin/bash
-set -euxo pipefail
+# orangefs_functions.sh - Stateless OrangeFS installation and deployment
+# All configuration passed via function arguments
 
-log_with_level() {
-  local level="$1"
-  shift
-  echo "[$(date -Is)] STATUS=${level} $*"
-}
+# Source common logging library if not already sourced
+if ! declare -f log_info &>/dev/null; then
+  SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  source "${SCRIPT_ROOT}/lib/logging.sh"
+fi
 
-log_info() {
-  log_with_level "INFO" "$@"
-}
-
-log_warning() {
-  log_with_level "WARNING" "$@"
-}
-
-log_error() {
-  log_with_level "ERROR" "$@"
-}
-
-log_debug() {
-  log_with_level "DEBUG" "$@"
-}
-
-resolve_orangefs_host_from_ip() {
-  local node_ref="$1"
-  local host_name
-
-  if [[ ! "${node_ref}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "${node_ref}"
-    return 0
-  fi
-
-  host_name="$(getent hosts "${node_ref}" | awk '{print $2; exit}' || true)"
-  if [ -n "${host_name}" ]; then
-    echo "${host_name}"
-    return 0
-  fi
-
-  host_name="$(timeout 20 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o BatchMode=yes "cc@${node_ref}" "hostname -s" </dev/null 2>/dev/null || true)"
-  if [ -n "${host_name}" ]; then
-    echo "${host_name}"
-    return 0
-  fi
-
-  log_error "Could not resolve hostname for ${node_ref}"
-  return 1
-}
-
+# Install OrangeFS dependencies
 install_orangefs_dependencies() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential wget tar \
-    liblmdb-dev libssl-dev libattr1-dev libfuse-dev pkg-config  environment-modules lmod
+    liblmdb-dev libssl-dev libattr1-dev libfuse-dev pkg-config environment-modules lmod
+  log_info "OrangeFS dependencies installed"
 }
 
+# Install OrangeFS from source
+# Args: version (default 2.10.0), prefix (default /opt/shared/orangefs/{version})
 install_orangefs() {
-  local version="2.10.0"
-  local prefix="/opt/shared/orangefs/${version}"
+  local version="${1:-2.10.0}"
+  local prefix="${2:-/opt/shared/orangefs/${version}}"
   local pkgname="orangefs"
   local ofsurl="https://github.com/waltligon/orangefs/releases/download/v.${version}/orangefs-${version}.tar.gz"
   local temp_dir="/tmp/orangefs-install"
@@ -84,10 +48,41 @@ install_orangefs() {
   rm -rf "${temp_dir}"
 }
 
+# Resolve OrangeFS hostname from IP (with fallback to IP if unresolvable)
+# Args: node_ref (IP or hostname), ssh_timeout (default 20s)
+resolve_orangefs_host_from_ip() {
+  local node_ref="$1"
+  local ssh_timeout="${2:-20}"
+  local host_name
+
+  if [[ ! "${node_ref}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "${node_ref}"
+    return 0
+  fi
+
+  host_name="$(getent hosts "${node_ref}" | awk '{print $2; exit}' || true)"
+  if [ -n "${host_name}" ]; then
+    echo "${host_name}"
+    return 0
+  fi
+
+  host_name="$(timeout "${ssh_timeout}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o BatchMode=yes "cc@${node_ref}" "hostname -s" </dev/null 2>/dev/null || true)"
+  if [ -n "${host_name}" ]; then
+    echo "${host_name}"
+    return 0
+  fi
+
+  log_error "Could not resolve hostname for ${node_ref}"
+  return 1
+}
+
+# Setup OrangeFS lmod modulefile
+# Args: version (default 2.10.0), prefix (default /opt/shared/orangefs/{version}), nfs_mount_point (default /opt/nfs_client)
 setup_orangefs_module() {
-  local version="2.10.0"
-  local prefix="/opt/nfs_client/orangefs/${version}"
-  local module_dir="/opt/nfs_client/apps/modulefiles"
+  local version="${1:-2.10.0}"
+  local prefix="${2:-/opt/shared/orangefs/${version}}"
+  local nfs_mount_point="${3:-/opt/nfs_client}"
+  local module_dir="${nfs_mount_point}/apps/modulefiles"
 
   mkdir -p "${module_dir}"
 
@@ -163,39 +158,45 @@ execute({
 LUAEOF
 
   mkdir -p /etc/profile.d
-  echo 'export MODULEPATH="/opt/nfs_client/apps/modulefiles:${MODULEPATH}"' > /etc/profile.d/orangefs-module.sh
+  echo "export MODULEPATH=\"${module_dir}:\${MODULEPATH}\"" > /etc/profile.d/orangefs-module.sh
   chmod 644 /etc/profile.d/orangefs-module.sh
 
-  echo "[$(date -Is)] STATUS=SUCCESS OrangeFS module configured"
+  log_info "OrangeFS module configured at ${module_dir}/orangefs.lua"
 }
 
+# Setup OrangeFS directories with proper ownership
+# Args: target_user, data_dir, metadata_dir, mount_dir, log_dir
 setup_orangefs_directories() {
-  mkdir -p /mnt/nvme/orangefs_data
-  mkdir -p /mnt/nvme/orangefs_metadata
-  mkdir -p /mnt/orangefs
-  mkdir -p /opt/orangefs/logs
+  local target_user="$1"
+  local data_dir="${2:-/mnt/nvme/orangefs_data}"
+  local metadata_dir="${3:-/mnt/nvme/orangefs_metadata}"
+  local mount_dir="${4:-/mnt/orangefs}"
+  local log_dir="${5:-/opt/orangefs/logs}"
 
-  chown -R cc:cc /mnt/nvme
-  chown -R cc:cc /mnt/nvme
-  chown -R cc:cc /mnt/orangefs
-  chown -R cc:cc /opt/orangefs/logs
+  mkdir -p "$data_dir" "$metadata_dir" "$mount_dir" "$log_dir"
+  chown -R "${target_user}:${target_user}" "$data_dir" "$metadata_dir" "$mount_dir" "$log_dir"
+  chmod 755 "$data_dir" "$metadata_dir" "$mount_dir" "$log_dir"
 
-  STORAGE_SERVER_IP="$(head -n1 /opt/nfs_client/orangefs_server_list.txt || true)"
-  echo "tcp://${STORAGE_SERVER_IP}:3334/orangefs /mnt/orangefs pvfs2 defaults,noauto 0 0" > /etc/pvfs2tab
-
-  chmod a+r /etc/pvfs2tab
-  echo "[$(date -Is)] STATUS=SUCCESS OrangeFS directories created"
+  log_info "OrangeFS directories created and owned by ${target_user}"
+  log_debug "  Data directory:     ${data_dir}"
+  log_debug "  Metadata directory: ${metadata_dir}"
+  log_debug "  Mount directory:    ${mount_dir}"
+  log_debug "  Log directory:      ${log_dir}"
 }
 
+# Configure OrangeFS firewall rules
+# Args: ports_csv (e.g., "3334/tcp,3335/tcp"), optional: firewall_cmd_path
 configure_orangefs_firewall() {
+  local ports_csv="${1:-3334/tcp,3335/tcp}"
+  local firewall_cmd="${2:-firewall-cmd}"
   local failed=0
 
   run_firewall_cmd() {
-    if firewall-cmd "$@" >/dev/null 2>&1; then
+    if "$firewall_cmd" "$@" >/dev/null 2>&1; then
       return 0
     fi
 
-    if command -v sudo >/dev/null 2>&1 && sudo -n firewall-cmd "$@" >/dev/null 2>&1; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n "$firewall_cmd" "$@" >/dev/null 2>&1; then
       return 0
     fi
 
@@ -214,7 +215,7 @@ configure_orangefs_firewall() {
     return 1
   }
 
-  apply_orangefs_port_rule() {
+  apply_port_rule() {
     local port="$1"
 
     if run_firewall_cmd --permanent --add-port="${port}"; then
@@ -229,7 +230,7 @@ configure_orangefs_firewall() {
     return 1
   }
 
-  if ! command -v firewall-cmd >/dev/null 2>&1; then
+  if ! command -v "$firewall_cmd" >/dev/null 2>&1; then
     log_error "firewall-cmd not available; OrangeFS firewall setup is mandatory"
     return 1
   fi
@@ -240,15 +241,14 @@ configure_orangefs_firewall() {
     run_systemctl_cmd start firewalld || true
   fi
 
-  if ! apply_orangefs_port_rule "3334/tcp"; then
-    log_warning "Failed to add port 3334/tcp"
-    failed=1
-  fi
-
-  if ! apply_orangefs_port_rule "3335/tcp"; then
-    log_warning "Failed to add port 3335/tcp"
-    failed=1
-  fi
+  while IFS=',' read -r port; do
+    port=$(echo "$port" | xargs)  # trim whitespace
+    [ -z "$port" ] && continue
+    if ! apply_port_rule "$port"; then
+      log_warning "Failed to add port ${port}"
+      failed=1
+    fi
+  done <<< "$ports_csv"
 
   if ! run_firewall_cmd --reload; then
     log_warning "Failed to reload firewall configuration; attempting firewalld restart"
@@ -263,87 +263,33 @@ configure_orangefs_firewall() {
   fi
 
   if [ "$failed" -eq 0 ]; then
-    log_info "OrangeFS firewall rules configured successfully"
+    log_info "OrangeFS firewall rules configured for ports: ${ports_csv}"
   else
-    log_warning "OrangeFS firewall rules were partially applied after retries"
+    log_warning "OrangeFS firewall configuration partially applied after retries"
   fi
 
   return 0
 }
 
-
-# TODO: replace with except script.
-generate_orangefs_config() {
-  local compute_ips_file="$1"
-  local config_file="$2"
-  local node_ref
-  local host_name
-
-  log_info "Generating OrangeFS configuration at ${config_file}"
-
-  local data_dir="/mnt/nvme/orangefs_data"
-  local meta_dir="/mnt/nvme/orangefs_metadata"
-  local mount_dir="/mnt/orangefs"
-  local comm_port="3334"
-  local io_port="3335"
-  local fs_name="orangefs"
-
-  {
-    echo "<OrangeFSConfig>"
-    echo "  <Filesystem>"
-    echo "    <Name>${fs_name}</Name>"
-    echo "    <ID>1</ID>"
-    echo "  </Filesystem>"
-    echo "  <ServerOptions>"
-    echo "    <Communication>TCP</Communication>"
-    echo "    <Port>${comm_port}</Port>"
-    echo "  </ServerOptions>"
-    echo "  <DataHandleOptions>"
-    echo "    <DataStorageSpace>${data_dir}</DataStorageSpace>"
-    echo "    <MetadataStorageSpace>${meta_dir}</MetadataStorageSpace>"
-    echo "  </DataHandleOptions>"
-    echo "  <ClientOptions>"
-    echo "    <Communication>TCP</Communication>"
-    echo "    <Port>${io_port}</Port>"
-    echo "    <MountPoint>${mount_dir}</MountPoint>"
-    echo "  </ClientOptions>"
-    echo "  <StorageServers>"
-
-    while IFS= read -r node_ref; do
-      if [ -n "$node_ref" ]; then
-        host_name="$(resolve_orangefs_host_from_ip "${node_ref}")" || return 1
-        echo "    <Server>"
-        echo "      <HostName>${host_name}</HostName>"
-        echo "      <DataStorageSpace>${data_dir}</DataStorageSpace>"
-        echo "      <MetadataStorageSpace>${meta_dir}</MetadataStorageSpace>"
-        echo "    </Server>"
-      fi
-    done <"$compute_ips_file"
-
-    echo "  </StorageServers>"
-    echo "</OrangeFSConfig>"
-  } >"$config_file"
-  chown cc:cc "${config_file}"
-  log_info "OrangeFS configuration generated at ${config_file}"
-}
-
+# Generate OrangeFS configuration via expect script
+# Args: storage_ips_file, config_file, ofs_path, data_dir, metadata_dir, comm_port, fs_name, log_path
 generate_orangefs_config_expect() {
-  local compute_ips_file="$1"
+  local storage_ips_file="$1"
   local config_file="$2"
-  local ofs_path="${3:-/opt/nfs_client/orangefs/2.10.0}"
+  local ofs_path="${3:-/opt/shared/orangefs/2.10.0}"
+  local data_dir="${4:-/mnt/nvme/orangefs_data}"
+  local metadata_dir="${5:-/mnt/nvme/orangefs_metadata}"
+  local comm_port="${6:-3334}"
+  local fs_name="${7:-orangefs}"
+  local log_path="${8:-/opt/orangefs/logs/orangefs.log}"
 
-  local data_dir="/mnt/nvme/orangefs_data"
-  local meta_dir="/mnt/nvme/orangefs_metadata"
-  local comm_port="3334"
-  local fs_name="orangefs"
-  local log_path="/opt/orangefs/logs/orangefs.log"
   local io_servers
   local meta_servers
   local node_ref
   local host_name
 
-  if [ ! -f "${compute_ips_file}" ]; then
-    log_error "Compute IP list file not found: ${compute_ips_file}"
+  if [ ! -f "${storage_ips_file}" ]; then
+    log_error "Storage IP list file not found: ${storage_ips_file}"
     return 1
   fi
 
@@ -366,21 +312,21 @@ generate_orangefs_config_expect() {
     else
       io_servers="${io_servers},${host_name}"
     fi
-  done < "${compute_ips_file}"
+  done < "${storage_ips_file}"
 
   meta_servers="${io_servers}"
 
   if [ -z "${io_servers}" ]; then
-    log_error "No IPs found in ${compute_ips_file}"
+    log_error "No IPs found in ${storage_ips_file}"
     return 1
   fi
 
   mkdir -p "$(dirname "${config_file}")"
-  mkdir -p "${log_path}"
+  mkdir -p "${log_path%/*}"
 
-  log_info "Generating OrangeFS configuration with pvfs2-genconfig and expect"
+  log_info "Generating OrangeFS configuration with pvfs2-genconfig"
   if ! IO_SERVERS="${io_servers}" META_SERVERS="${meta_servers}" OFS_PATH="${ofs_path}" \
-    DATA_DIR="${data_dir}" META_DIR="${meta_dir}" COMM_PORT="${comm_port}" FS_NAME="${fs_name}" \
+    DATA_DIR="${data_dir}" META_DIR="${metadata_dir}" COMM_PORT="${comm_port}" FS_NAME="${fs_name}" \
     CONFIG_FILE="${config_file}" LOG_PATH="${log_path}" expect <<'EOF'
 set timeout 120
 
@@ -411,21 +357,23 @@ set result [wait]
 exit [lindex $result 3]
 EOF
   then
-
     log_error "Failed to generate OrangeFS config with expect"
     return 1
   fi
 
-  chown cc:cc "${config_file}"
+  chmod 644 "${config_file}"
   log_info "OrangeFS configuration generated at ${config_file}"
 }
 
+# Create OrangeFS server and client node lists from IP addresses
+# Args: storage_ips_file, all_nodes_file, server_list_file, client_list_file, login_node_file, target_user
 create_orangefs_node_lists() {
   local storage_ips_file="$1"
   local all_nodes_file="$2"
   local server_list_file="$3"
   local client_list_file="$4"
   local login_node_file="${5:-/opt/nfs_client/login_node.txt}"
+  local target_user="${6:-cc}"
   local node_ref
   local host_name
   local login_ref
@@ -446,8 +394,8 @@ create_orangefs_node_lists() {
     echo "${host_name}" >> "$client_list_file"
   done < "$all_nodes_file"
 
-  login_ref="${LOGIN_IP:-}"
-  if [ -z "${login_ref}" ] && [ -f "${login_node_file}" ]; then
+  login_ref=""
+  if [ -f "${login_node_file}" ]; then
     login_ref="$(head -n1 "${login_node_file}" || true)"
   fi
   if [ -n "${login_ref}" ]; then
@@ -458,18 +406,20 @@ create_orangefs_node_lists() {
   sort -u "$server_list_file" -o "$server_list_file"
   sort -u "$client_list_file" -o "$client_list_file"
 
-  chown cc:cc "$server_list_file" "$client_list_file"
+  chown "${target_user}:${target_user}" "$server_list_file" "$client_list_file"
 
   log_info "OrangeFS server list: ${server_list_file}"
   log_info "OrangeFS client list: ${client_list_file}"
 }
 
+# Install parallel-ssh package
 install_parallel_ssh() {
   log_info "Installing parallel-ssh on login node"
   DEBIAN_FRONTEND=noninteractive apt-get update
   DEBIAN_FRONTEND=noninteractive apt-get install -y pssh || DEBIAN_FRONTEND=noninteractive apt-get install -y parallel-ssh
 }
 
+# Install expect package
 install_expect_package() {
   if command -v expect >/dev/null 2>&1; then
     log_info "expect already installed"
@@ -481,13 +431,16 @@ install_expect_package() {
   DEBIAN_FRONTEND=noninteractive apt-get install -y expect
 }
 
+# Deploy OrangeFS servers
+# Args: server_list_file, config_file, ofs_path, script_root
 deploy_orangefs_servers() {
-  local server_loc="$1"
-  local conf_file="$2"
-  local ofs_path="${3:-/opt/nfs_client/orangefs/2.10.0}"
+  local server_list_file="$1"
+  local config_file="$2"
+  local ofs_path="${3:-/opt/shared/orangefs/2.10.0}"
+  local script_root="${4:-.}"
 
   log_info "Configuring OrangeFS servers"
-  if ! timeout 300 parallel-ssh -P -h "${server_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+  if ! timeout 300 parallel-ssh -P -h "${server_list_file}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
     "log_dir='/tmp/orangefs/logs' && \
      mkdir -p \"\${log_dir}\" && \
      log_file=\"\${log_dir}/orangefs-server-block-\$(hostname).log\" && \
@@ -502,36 +455,40 @@ deploy_orangefs_servers() {
        chown -R cc:cc /mnt/nvme/orangefs_data /mnt/nvme/orangefs_metadata /mnt/orangefs /opt/orangefs || true && \
        rm -rf /mnt/nvme/orangefs_data/* /mnt/nvme/orangefs_metadata/* && \
        rm -f \"\${log_dir}/orangefs.log\" && \
-       ${ofs_path}/sbin/pvfs2-server -f -a \$(hostname) \"${conf_file}\" && \
-       ${ofs_path}/sbin/pvfs2-server -a \$(hostname) \"${conf_file}\" && \
-       source ${SCRIPT_ROOT}/lib/orangefs_functions.sh && configure_orangefs_firewall; \
+       ${ofs_path}/sbin/pvfs2-server -f -a \$(hostname) \"${config_file}\" && \
+       ${ofs_path}/sbin/pvfs2-server -a \$(hostname) \"${config_file}\";
      } > \"\${log_file}\" 2>&1"; then
     log_error "Failed to configure OrangeFS servers"
     return 1
   fi
 
   log_info "Verifying OrangeFS server deployment"
-  timeout 60 parallel-ssh -P -h "${server_loc}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+  timeout 60 parallel-ssh -P -h "${server_list_file}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
     "(ps -aef | grep pvfs2-server | grep -v grep) && echo 'OrangeFS servers running' || echo 'Server deployment verification needed'"
+
+  log_info "OrangeFS servers deployed"
 }
 
+# Deploy OrangeFS clients
+# Args: client_list_file, server_list_file, client_dir, fs_name, comm_port, script_root
 deploy_orangefs_clients() {
-  local client_loc="$1"
-  local server_loc="$2"
-  local client_dir="$3"
-  local fs_name="$4"
+  local client_list_file="$1"
+  local server_list_file="$2"
+  local client_dir="${3:-/mnt/orangefs}"
+  local fs_name="${4:-orangefs}"
   local comm_port="${5:-3334}"
+  local script_root="${6:-.}"
 
   log_info "Configuring OrangeFS clients"
-  if ! timeout 300 parallel-ssh -P -h "${client_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+  if ! timeout 300 parallel-ssh -P -h "${client_list_file}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
     "log_dir='/tmp/orangefs/logs' && \
      mkdir -p \"\${log_dir}\" && \
      log_file=\"\${log_dir}/orangefs-client-block-\$(hostname).log\" && \
      { \
        set -x && \
        mkdir -p \"${client_dir}\" && \
-       sudo /opt/nfs_client/chameleoncloud/orangefs/scripts/orangefs_client_mount.sh && \
-       sudo mount -t pvfs2 tcp://\$(head -n1 \"${server_loc}\"):${comm_port}/${fs_name} \"${client_dir}\" && \
+       sudo ${script_root}/orangefs_client_mount.sh && \
+       sudo mount -t pvfs2 tcp://\$(head -n1 \"${server_list_file}\"):${comm_port}/${fs_name} \"${client_dir}\" && \
        echo  \$(hostname) >  \"${client_dir}/\$(hostname).txt\"; \
      } > \"\${log_file}\" 2>&1"; then
     log_error "Failed to configure OrangeFS clients"
@@ -539,38 +496,43 @@ deploy_orangefs_clients() {
   fi
 
   log_info "Verifying OrangeFS client deployment"
-  timeout 60 parallel-ssh -P -h "${client_loc}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+  timeout 60 parallel-ssh -P -h "${client_list_file}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
     "(mount | grep pvfs2) && echo 'OrangeFS mounted' || echo 'Mount verification needed'"
+
+  log_info "OrangeFS clients deployed"
 }
 
+# Complete OrangeFS cluster deployment orchestration
+# Args: server_list_file, client_list_file, config_file, client_dir, comm_port, ofs_path, script_root
 deploy_orangefs_cluster() {
-  local server_loc="$1"
-  local client_loc="$2"
-  local conf_file="${3:-/opt/nfs_client/orangefs.conf}"
+  local server_list_file="$1"
+  local client_list_file="$2"
+  local config_file="${3:-/opt/shared/orangefs.conf}"
   local client_dir="${4:-/mnt/orangefs}"
   local comm_port="${5:-3334}"
-  local ofs_path="${6:-/opt/nfs_client/orangefs/2.10.0}"
-  local fs_name
+  local ofs_path="${6:-/opt/shared/orangefs/2.10.0}"
+  local script_root="${7:-.}"
 
-  if [ ! -f "${conf_file}" ]; then
-    log_error "Configuration file not found: ${conf_file}"
+  if [ ! -f "${config_file}" ]; then
+    log_error "Configuration file not found: ${config_file}"
     return 1
   fi
 
-  fs_name="$(grep -oP '(?<=<Name>)[^<]+' "${conf_file}" | head -n 1 || true)"
+  local fs_name
+  fs_name="$(grep -oP '(?<=<Name>)[^<]+' "${config_file}" | head -n 1 || true)"
   if [ -z "${fs_name}" ]; then
     fs_name="orangefs"
   fi
 
-  log_info "Starting OrangeFS deployment"
-  log_info "Server list: ${server_loc}"
-  log_info "Client list: ${client_loc}"
-  log_info "Config file: ${conf_file}"
-  log_info "Client mount dir: ${client_dir}"
+  log_info "Starting OrangeFS cluster deployment"
+  log_info "Server list: ${server_list_file}"
+  log_info "Client list: ${client_list_file}"
+  log_info "Config file: ${config_file}"
+  log_info "Mount directory: ${client_dir}"
   log_info "Filesystem name: ${fs_name}"
 
-  deploy_orangefs_servers "${server_loc}" "${conf_file}" "${ofs_path}"
-  deploy_orangefs_clients "${client_loc}" "${server_loc}" "${client_dir}" "${fs_name}" "${comm_port}"
+  deploy_orangefs_servers "${server_list_file}" "${config_file}" "${ofs_path}" "${script_root}"
+  deploy_orangefs_clients "${client_list_file}" "${server_list_file}" "${client_dir}" "${fs_name}" "${comm_port}" "${script_root}"
 
-  log_info "OrangeFS deployment completed"
+  log_info "OrangeFS cluster deployment completed"
 }

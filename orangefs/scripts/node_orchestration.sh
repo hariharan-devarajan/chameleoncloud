@@ -191,8 +191,8 @@ orchestrate_node_setup() {
   source "${script_root}/lib/logging.sh"
   source "${script_root}/lib/key_setup.sh"
   source "${script_root}/lib/directory_structures.sh"
-  source "${script_root}/lib/nfs_functions_refactored.sh"
-  source "${script_root}/lib/orangefs_functions_refactored.sh"
+  source "${script_root}/lib/nfs_functions.sh"
+  source "${script_root}/lib/orangefs_functions.sh"
 
   # ========================================================================
   # Stage 1: System Updates
