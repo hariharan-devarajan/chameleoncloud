@@ -5,8 +5,7 @@
 set -eu
 
 # Source common logging library first
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_ROOT}/lib/logging.sh"
+source "${SCRIPT_ROOT}/orangefs/scripts/lib/logging.sh"
 
 # Enable trace mode if LOG_LEVEL=TRACE
 enable_trace_mode
@@ -25,6 +24,7 @@ DEFAULT_ORANGEFS_DATA_DIR="/mnt/nvme/orangefs_data"
 DEFAULT_ORANGEFS_METADATA_DIR="/mnt/nvme/orangefs_metadata"
 DEFAULT_ORANGEFS_MOUNT_DIR="/mnt/orangefs"
 DEFAULT_ORANGEFS_LOG_DIR="/opt/orangefs/logs"
+DEFAULT_SCRIPT_ROOT=$(cd "$(dirname "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")" && pwd)
 
 # ============================================================================
 # Function: Initialize Post-Nodes Logging and Environment
@@ -64,6 +64,7 @@ write_post_nodes_environment_file() {
   local orangefs_metadata_dir="${10}"
   local orangefs_mount_dir="${11}"
   local orangefs_log_dir="${12}"
+  local script_root="${13}"
 
   {
     echo "# Post-Nodes Orchestration Environment Variables"
@@ -89,6 +90,9 @@ write_post_nodes_environment_file() {
     echo "LOG_LEVEL=\"${log_level}\""
     echo "LOG_DIR=\"/var/log/datacrumbs\""
     echo "RUNTIME_DIR=\"/var/run/datacrumbs\""
+    echo ""
+    echo "# Script Root"
+    echo "SCRIPT_ROOT=\"${script_root}\""
   } > "$env_file"
 
   chmod 600 "$env_file"
@@ -338,6 +342,8 @@ main_post_nodes_orchestration() {
   local orangefs_config_file="${nfs_mount_point}/orangefs.conf"
   local orangefs_server_list="${nfs_mount_point}/orangefs_server_list.txt"
   local orangefs_client_list="${nfs_mount_point}/orangefs_client_list.txt"
+  local script_root="${SCRIPT_ROOT:-${DEFAULT_SCRIPT_ROOT}}"
+
 
   # Set LOG_LEVEL for this and all child scripts
   export LOG_LEVEL="$log_level"
@@ -349,10 +355,9 @@ main_post_nodes_orchestration() {
   log_info "==============================================="
 
   # Source function libraries
-  local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  source "${script_root}/lib/nfs_functions.sh"
-  source "${script_root}/lib/directory_structures.sh"
-  source "${script_root}/lib/orangefs_functions.sh"
+  source "${script_root}/orangefs/scripts/lib/nfs_functions.sh"
+  source "${script_root}/orangefs/scripts/lib/directory_structures.sh"
+  source "${script_root}/orangefs/scripts/lib/orangefs_functions.sh"
 
   # Ensure directories exist
   mkdir -p "$nfs_mount_point"
@@ -429,8 +434,8 @@ main_post_nodes_orchestration() {
     ORANGEFS_MOUNT_DIR="$orangefs_mount_dir" \
     ORANGEFS_LOG_DIR="$orangefs_log_dir" \
     bash -lc '
-      source "${SCRIPT_ROOT}/lib/logging.sh"
-      source "${SCRIPT_ROOT}/lib/orangefs_functions.sh"
+      source "${SCRIPT_ROOT}/orangefs/scripts/lib/logging.sh"
+      source "${SCRIPT_ROOT}/orangefs/scripts/lib/orangefs_functions.sh"
       create_orangefs_node_lists \
         "${NFS_MOUNT_POINT}/storage_nodes.txt" \
         "${NFS_MOUNT_POINT}/all_nodes.txt" \
@@ -485,6 +490,7 @@ main() {
   local orangefs_metadata_dir="${ORANGEFS_METADATA_DIR:-${DEFAULT_ORANGEFS_METADATA_DIR}}"
   local orangefs_mount_dir="${ORANGEFS_MOUNT_DIR:-${DEFAULT_ORANGEFS_MOUNT_DIR}}"
   local orangefs_log_dir="${ORANGEFS_LOG_DIR:-${DEFAULT_ORANGEFS_LOG_DIR}}"
+  local script_root="${SCRIPT_ROOT:-${DEFAULT_SCRIPT_ROOT}}"
 
   # Initialize logging and environment
   initialize_post_nodes_environment
@@ -502,7 +508,8 @@ main() {
     "$orangefs_data_dir" \
     "$orangefs_metadata_dir" \
     "$orangefs_mount_dir" \
-    "$orangefs_log_dir"
+    "$orangefs_log_dir" \
+    "$script_root"
 
   # Load environment if not already sourced
   if [ -z "$stack_name" ] || [ ! -f "$env_file" ]; then

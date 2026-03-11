@@ -4,8 +4,7 @@
 set -eu
 
 # Source common logging library first
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_ROOT}/lib/logging.sh"
+source "${SCRIPT_ROOT}/orangefs/scripts/lib/logging.sh"
 
 # Enable trace mode if LOG_LEVEL=TRACE
 enable_trace_mode
@@ -22,6 +21,7 @@ DEFAULT_ORANGEFS_DATA_DIR="/mnt/nvme/orangefs_data"
 DEFAULT_ORANGEFS_METADATA_DIR="/mnt/nvme/orangefs_metadata"
 DEFAULT_ORANGEFS_MOUNT_DIR="/mnt/orangefs"
 DEFAULT_ORANGEFS_LOG_DIR="/opt/orangefs/logs"
+DEFAULT_SCRIPT_ROOT=$(cd "$(dirname "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")" && pwd)
 
 # ============================================================================
 # Function: Setup Bootstrap Environment and Logging
@@ -188,11 +188,11 @@ orchestrate_node_setup() {
   log_info "==============================================="
 
   # Source function libraries
-  source "${script_root}/lib/logging.sh"
-  source "${script_root}/lib/key_setup.sh"
-  source "${script_root}/lib/directory_structures.sh"
-  source "${script_root}/lib/nfs_functions.sh"
-  source "${script_root}/lib/orangefs_functions.sh"
+  source "${script_root}/orangefs/scripts/lib/logging.sh"
+  source "${script_root}/orangefs/scripts/lib/key_setup.sh"
+  source "${script_root}/orangefs/scripts/lib/directory_structures.sh"
+  source "${script_root}/orangefs/scripts/lib/nfs_functions.sh"
+  source "${script_root}/orangefs/scripts/lib/orangefs_functions.sh"
 
   # ========================================================================
   # Stage 1: System Updates
@@ -229,15 +229,15 @@ orchestrate_node_setup() {
     log_info "NFS server configured and running"
 
     # Prepare for post-nodes processing
-    write_post_nodes_env "/etc/datacrumbs-post.env" \
+    write_post_nodes_env "/var/run/datacrumbs/post-nodes-launch.env" \
       "$stack_name" "$compute_count" "$storage_count" \
       "$os_auth_type" "$os_auth_url" "$os_identity_api_version" \
       "$os_region_name" "$os_interface" "$os_app_cred_id" "$os_app_cred_secret"
     prepare_post_nodes_logging
 
     # Start post-nodes script in background
-    chmod +x "${script_root}/datacrumbs-post-nodes.sh"
-    nohup bash "${script_root}/datacrumbs-post-nodes.sh" >> /var/log/datacrumbs-post-nodes-launch.log 2>&1 &
+    chmod +x "${script_root}/orangefs/scripts/datacrumbs-post-nodes.sh"
+    nohup bash "${script_root}/orangefs/scripts/datacrumbs-post-nodes.sh" >> /var/log/datacrumbs/post-nodes-launch.log 2>&1 &
     log_info "Post-nodes processing script started in background"
 
     # Use local shared mount as NFS mount point on login node
@@ -302,7 +302,7 @@ main() {
   local os_interface="${OS_INTERFACE:-}"
   local os_app_cred_id="${OS_APPLICATION_CREDENTIAL_ID:-}"
   local os_app_cred_secret="${OS_APPLICATION_CREDENTIAL_SECRET:-}"
-  local script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local script_root="${SCRIPT_ROOT:-${DEFAULT_SCRIPT_ROOT}}"
   local log_level="${LOG_LEVEL:-INFO}"
 
   # Determine node role
