@@ -23,6 +23,57 @@ DEFAULT_ORANGEFS_MOUNT_DIR="/mnt/orangefs"
 DEFAULT_ORANGEFS_LOG_DIR="/opt/orangefs/logs"
 DEFAULT_SCRIPT_ROOT=$(cd "$(dirname "$(dirname "$(dirname "${BASH_SOURCE[0]}")")")" && pwd)
 
+# ==========================================================================
+# Package Management Helpers
+# ==========================================================================
+disable_ddebs_repositories() {
+  local repo_file
+  local disabled_any=0
+
+  for repo_file in /etc/apt/sources.list.d/*; do
+    [ -f "${repo_file}" ] || continue
+    if grep -q 'ddebs\.ubuntu\.com' "${repo_file}" 2>/dev/null; then
+      mv "${repo_file}" "${repo_file}.disabled-by-orangefs"
+      disabled_any=1
+      log_info "Disabled debug-symbol APT repository file ${repo_file}"
+    fi
+  done
+
+  if [ -f /etc/apt/sources.list ] && grep -Eq '^[[:space:]]*deb(-src)?[[:space:]].*ddebs\.ubuntu\.com' /etc/apt/sources.list; then
+    sed -i -E '/^[[:space:]]*deb(-src)?[[:space:]].*ddebs\.ubuntu\.com/s/^/# disabled by orangefs: /' /etc/apt/sources.list
+    disabled_any=1
+    log_info "Disabled debug-symbol APT entries in /etc/apt/sources.list"
+  fi
+
+  if [ "${disabled_any}" -eq 0 ]; then
+    log_debug "No debug-symbol APT repositories detected"
+  fi
+}
+
+retry_apt_update() {
+  local max_attempts="${1:-5}"
+  local retry_delay_seconds="${2:-15}"
+  local attempt
+
+  disable_ddebs_repositories
+
+  for attempt in $(seq 1 "${max_attempts}"); do
+    if DEBIAN_FRONTEND=noninteractive apt-get update -o Acquire::Retries=3; then
+      return 0
+    fi
+
+    if [ "${attempt}" -lt "${max_attempts}" ]; then
+      log_warning "apt-get update failed (attempt ${attempt}/${max_attempts}); retrying in ${retry_delay_seconds}s"
+      apt-get clean >/dev/null 2>&1 || true
+      rm -rf /var/lib/apt/lists/partial/* >/dev/null 2>&1 || true
+      sleep "${retry_delay_seconds}"
+    fi
+  done
+
+  log_error "apt-get update failed after ${max_attempts} attempts"
+  return 1
+}
+
 # ============================================================================
 # Function: Setup Bootstrap Environment and Logging
 # ============================================================================
@@ -198,7 +249,7 @@ orchestrate_node_setup() {
   # Stage 1: System Updates
   # ========================================================================
   log_info "Stage 1: System Updates"
-  DEBIAN_FRONTEND=noninteractive apt-get update
+  retry_apt_update
   log_debug "System packages updated"
 
   # ========================================================================
@@ -233,8 +284,6 @@ orchestrate_node_setup() {
     nohup bash "${script_root}/orangefs/scripts/post_nodes_orchestration.sh" >> /var/log/datacrumbs/post-nodes-launch.log 2>&1 &
     log_info "Post-nodes processing script started in background"
 
-    # Use local shared mount as NFS mount point on login node
-    link_login_shared_mount "$nfs_mount_point" "$nfs_export_dir"
     resolved_nfs_server_ip="$(resolve_nfs_server_ip)"
   else
     log_info "Stage 4: Skipped (Not Login Node)"

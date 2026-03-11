@@ -314,6 +314,16 @@ setup_nfs_client_mount() {
     return 1
   fi
 
+  if mountpoint -q "$nfs_mount_point"; then
+    log_info "NFS client mount already present at ${nfs_mount_point}; skipping remount"
+    return 0
+  fi
+
+  if [ -L "$nfs_mount_point" ]; then
+    log_info "Replacing symlinked mount point ${nfs_mount_point} with a real directory for NFS mount"
+    rm -f "$nfs_mount_point"
+  fi
+
   mkdir -p "$nfs_mount_point"
   chown -R "${target_user}:${target_user}" "$nfs_mount_point"
 
