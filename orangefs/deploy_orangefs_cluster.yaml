@@ -60,7 +60,7 @@ resources:
             else
               git clone --depth 1 --branch "$REPO_REF" "$REPO_URL" "$SCRIPT_ROOT"
             fi
-
+            sudo chown -R "$TARGET_USER":"$TARGET_USER" "$SCRIPT_ROOT"
             echo "[$(date -Is)] Repository cloned successfully"
 
 
