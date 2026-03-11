@@ -229,8 +229,8 @@ orchestrate_node_setup() {
     log_info "NFS server configured and running"
 
     # Start post-nodes script in background
-    chmod +x "${script_root}/orangefs/scripts/datacrumbs-post-nodes.sh"
-    nohup bash "${script_root}/orangefs/scripts/datacrumbs-post-nodes.sh" >> /var/log/datacrumbs/post-nodes-launch.log 2>&1 &
+    chmod +x "${script_root}/orangefs/scripts/post_nodes_orchestration.sh"
+    nohup bash "${script_root}/orangefs/scripts/post_nodes_orchestration.sh" >> /var/log/datacrumbs/post-nodes-launch.log 2>&1 &
     log_info "Post-nodes processing script started in background"
 
     # Use local shared mount as NFS mount point on login node

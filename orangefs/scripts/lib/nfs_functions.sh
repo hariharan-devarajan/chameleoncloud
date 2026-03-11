@@ -31,7 +31,7 @@ setup_nfs_server() {
   chown -R "${target_user}:${target_user}" "$export_dir"
   chmod 755 "$export_dir"
 
-  echo "${export_dir} ${network_cidr}(rw,async,no_subtree_check)" > /etc/exports
+  echo "${export_dir} ${network_cidr}(rw,async,no_subtree_check,no_root_squash)" > /etc/exports
 
   systemctl enable rpcbind && systemctl start rpcbind
   systemctl enable nfs-kernel-server && systemctl start nfs-kernel-server
