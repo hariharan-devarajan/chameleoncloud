@@ -428,21 +428,31 @@ deploy_orangefs_servers() {
   local ofs_path="${3:-/opt/nfs_client/orangefs/2.10.0}"
 
   log_info "Configuring OrangeFS servers"
-  if ! timeout 300 parallel-ssh -h "${server_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
-    "export PATH=\"${ofs_path}/sbin:\${PATH}\" && \
-     export ORANGEFS_PATH=\"${ofs_path}\" && \
-     mkdir -p '/mnt/nvme/orangefs_data' && \
-     mkdir -p '/mnt/nvme/orangefs_metadata' && \
-     rm -rf /mnt/nvme/orangefs_data/* /mnt/nvme/orangefs_metadata/* && \
-     rm /opt/orangefs/logs/orangefs.log && \
-     ${ofs_path}/sbin/pvfs2-server -f -a '$(hostname)' \"${conf_file}\" && \
-     ${ofs_path}/sbin/pvfs2-server -a '$(hostname)' "${conf_file}\""; then
+  if ! timeout 300 parallel-ssh -P -h "${server_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+    "log_dir='/tmp/orangefs/logs' && \
+     mkdir -p \"\${log_dir}\" && \
+     log_file=\"\${log_dir}/orangefs-server-block-\$(hostname).log\" && \
+     { \
+       set -x && \
+       export PATH=\"${ofs_path}/sbin:\${PATH}\" && \
+       export ORANGEFS_PATH=\"${ofs_path}\" && \
+       mkdir -p '/mnt/nvme/orangefs_data' && \
+       mkdir -p '/mnt/nvme/orangefs_metadata' && \
+       mkdir -p '/mnt/orangefs' && \
+       mkdir -p '/opt/orangefs/logs' && \
+       chown -R cc:cc /mnt/nvme/orangefs_data /mnt/nvme/orangefs_metadata /mnt/orangefs /opt/orangefs || true && \
+       rm -rf /mnt/nvme/orangefs_data/* /mnt/nvme/orangefs_metadata/* && \
+       rm -f \"\${log_dir}/orangefs.log\" && \
+       ${ofs_path}/sbin/pvfs2-server -f -a \$(hostname) \"${conf_file}\" && \
+       ${ofs_path}/sbin/pvfs2-server -a \$(hostname) \"${conf_file}\" && \
+       source ${SCRIPT_ROOT}/lib/orangefs_functions.sh && configure_orangefs_firewall; \
+     } > \"\${log_file}\" 2>&1"; then
     log_error "Failed to configure OrangeFS servers"
     return 1
   fi
 
   log_info "Verifying OrangeFS server deployment"
-  timeout 60 parallel-ssh -h "${server_loc}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+  timeout 60 parallel-ssh -P -h "${server_loc}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
     "(ps -aef | grep pvfs2-server | grep -v grep) && echo 'OrangeFS servers running' || echo 'Server deployment verification needed'"
 }
 
@@ -454,16 +464,23 @@ deploy_orangefs_clients() {
   local comm_port="${5:-3334}"
 
   log_info "Configuring OrangeFS clients"
-  if ! timeout 300 parallel-ssh -h "${client_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
-    "mkdir -p \"${client_dir}\" && \
-     sudo /opt/nfs_client/chameleoncloud/orangefs/scripts/orangefs_client_mount.sh && \
-     sudo mount -t pvfs2 tcp://\$(head -n1 \"${server_loc}\"):${comm_port}/${fs_name} \"${client_dir}\""; then
+  if ! timeout 300 parallel-ssh -P -h "${client_loc}" -t 60 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+    "log_dir='/tmp/orangefs/logs' && \
+     mkdir -p \"\${log_dir}\" && \
+     log_file=\"\${log_dir}/orangefs-client-block-\$(hostname).log\" && \
+     { \
+       set -x && \
+       mkdir -p \"${client_dir}\" && \
+       sudo /opt/nfs_client/chameleoncloud/orangefs/scripts/orangefs_client_mount.sh && \
+       sudo mount -t pvfs2 tcp://\$(head -n1 \"${server_loc}\"):${comm_port}/${fs_name} \"${client_dir}\" && \
+       echo  \$(hostname) >  \"${client_dir}/\$(hostname).txt\"; \
+     } > \"\${log_file}\" 2>&1"; then
     log_error "Failed to configure OrangeFS clients"
     return 1
   fi
 
   log_info "Verifying OrangeFS client deployment"
-  timeout 60 parallel-ssh -h "${client_loc}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
+  timeout 60 parallel-ssh -P -h "${client_loc}" -t 30 -O "StrictHostKeyChecking=no" -O "BatchMode=yes" \
     "(mount | grep pvfs2) && echo 'OrangeFS mounted' || echo 'Mount verification needed'"
 }
 

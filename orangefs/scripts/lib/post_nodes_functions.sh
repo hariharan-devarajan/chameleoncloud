@@ -47,11 +47,13 @@ datacrumbs_post_nodes_setup() {
   export OS_APPLICATION_CREDENTIAL_SECRET
 
   mkdir -p /opt/nfs_client
-  : >/opt/nfs_client/all_nodes.txt
-  : >/opt/nfs_client/compute_nodes.txt
-  : >/opt/nfs_client/storage_nodes.txt
-  : >/opt/nfs_client/login_node.txt
-  log_debug "Reset node list files under /opt/nfs_client"
+  : >/opt/shared/all_nodes.txt
+  : >/opt/shared/compute_nodes.txt
+  : >/opt/shared/storage_nodes.txt
+  : >/opt/shared/login_node.txt
+  chown cc:cc /opt/shared/*.txt
+  chmod 777 /opt/shared/*.txt
+  log_debug "Reset node list files under /opt/shared"
 }
 
 wait_for_nodes_ready() {
@@ -179,14 +181,15 @@ configure_all_client_mounts() {
 
 finalize_post_nodes() {
   log_info "All nodes are up with IPs and NFS mounts configured"
-  chown cc:cc /opt/nfs_client/all_nodes.txt /opt/nfs_client/compute_nodes.txt /opt/nfs_client/storage_nodes.txt /opt/nfs_client/login_node.txt
   log_info "Running final cluster configuration script"
 }
 
 
 datacrumbs_post_nodes_main() {
   log_debug "Timeout config: OPENSTACK_TIMEOUT_SECONDS=${OPENSTACK_TIMEOUT_SECONDS:-30}, MOUNT_SSH_TIMEOUT_SECONDS=${MOUNT_SSH_TIMEOUT_SECONDS:-60}"
-  datacrumbs_post_nodes_setup
+  if [ "$IS_LOGIN_NODE" = "1" ]; then
+    datacrumbs_post_nodes_setup
+  fi
   wait_for_nodes_ready
   configure_all_client_mounts
   
