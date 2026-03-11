@@ -55,7 +55,7 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 log_info "Bootstrap started for role ${NODE_ROLE}"
 
 DEBIAN_FRONTEND=noninteractive apt-get update
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_ROOT/lib/key_functions.sh"
 source "$SCRIPT_ROOT/lib/nfs_functions.sh"
 log_debug "Loaded function libraries from ${SCRIPT_ROOT}/lib"
