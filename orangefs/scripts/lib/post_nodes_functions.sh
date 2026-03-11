@@ -24,7 +24,7 @@ log_debug() {
 }
 
 datacrumbs_post_nodes_setup() {
-  source /etc/datacrumbs-post.env
+  source /var/run/datacrumbs/post_nodes.env
 
   LOG_FILE="/var/log/datacrumbs-post-nodes.log"
   touch "$LOG_FILE"
