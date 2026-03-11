@@ -228,13 +228,6 @@ orchestrate_node_setup() {
     configure_nfs_firewall
     log_info "NFS server configured and running"
 
-    # Prepare for post-nodes processing
-    write_post_nodes_env "/var/run/datacrumbs/post-nodes-launch.env" \
-      "$stack_name" "$compute_count" "$storage_count" \
-      "$os_auth_type" "$os_auth_url" "$os_identity_api_version" \
-      "$os_region_name" "$os_interface" "$os_app_cred_id" "$os_app_cred_secret"
-    prepare_post_nodes_logging
-
     # Start post-nodes script in background
     chmod +x "${script_root}/orangefs/scripts/datacrumbs-post-nodes.sh"
     nohup bash "${script_root}/orangefs/scripts/datacrumbs-post-nodes.sh" >> /var/log/datacrumbs/post-nodes-launch.log 2>&1 &

@@ -51,7 +51,7 @@ initialize_post_nodes_environment() {
 # Function: Write Post-Nodes Environment to File
 # ============================================================================
 write_post_nodes_environment_file() {
-  local env_file="/var/run/datacrumbs/post_nodes_orchestration.env"
+  local env_file="/var/run/datacrumbs/post_nodes.env"
   local stack_name="$1"
   local compute_count="$2"
   local storage_count="$3"
